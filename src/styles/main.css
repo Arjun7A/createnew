@@ -1110,3 +1110,120 @@ body {
     font-size: 0.8em;
 }
 
+/* main.css */
+/* ... (all your existing styles) ... */
+
+/* Booking Form - Existing Bookings in Period Section - REFINED LIST STYLES */
+.existing-bookings-in-period-section.elegant-list-section {
+  border-top: 2px solid var(--primary-color);
+  margin-top: 30px;
+  background-color: #fcfdff; /* Slightly off-white for the section */
+  padding: 20px; /* Add padding to the section itself */
+  border-radius: var(--radius-md);
+}
+
+.existing-bookings-in-period-section .step-title {
+    color: var(--primary-dark);
+    margin-bottom: 20px; /* More space below title */
+}
+
+/* Removed .existing-bookings-layout as it's no longer a grid */
+
+.existing-bookings-list.elegant-scrollable-list {
+  max-height: 350px; /* Increased height for better viewing */
+  overflow-y: auto;
+  padding-right: 10px; 
+  /* Remove individual border if the section has one, or keep if preferred */
+  /* border: 1px solid var(--border-color-light, #eee); */
+  /* border-radius: var(--radius-sm); */
+  padding: 0; /* Remove padding if items have their own */
+}
+
+.period-booking-item-elegant {
+  background-color: #ffffff;
+  padding: 15px 20px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  border-left: 5px solid; /* Status indicator border */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  display: flex;
+  flex-direction: column; /* Stack main info and sub info */
+  gap: 5px; /* Space between main and sub info */
+}
+.period-booking-item-elegant:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.period-booking-item-elegant.status-confirmed {
+  border-left-color: var(--success-color);
+}
+.period-booking-item-elegant.status-pencil {
+  border-left-color: var(--warning-color);
+}
+
+.booking-item-main-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.booking-item-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--primary-dark);
+  margin-right: 10px; /* Space before room count */
+  flex-grow: 1;
+  word-break: break-word; /* Prevent long titles from breaking layout */
+}
+
+.booking-item-rooms {
+  font-size: 0.9rem;
+  color: var(--text-light);
+  white-space: nowrap; /* Keep room count on one line */
+}
+
+.booking-item-sub-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.booking-item-status-chip {
+  font-weight: bold;
+  text-transform: capitalize;
+  padding: 4px 10px;
+  border-radius: 12px; /* Pill shape */
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.status-chip-confirmed {
+  background-color: var(--success-color);
+  color: white;
+}
+.status-chip-pencil {
+  background-color: var(--warning-color);
+  color: var(--text-color); /* Darker text for better contrast on yellow */
+}
+
+/* Custom Scrollbar for the list (optional, WebKit browsers) */
+.elegant-scrollable-list::-webkit-scrollbar {
+  width: 8px;
+}
+.elegant-scrollable-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+.elegant-scrollable-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 10px;
+}
+.elegant-scrollable-list::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* Remove styles for .existing-bookings-calendar if they existed */
