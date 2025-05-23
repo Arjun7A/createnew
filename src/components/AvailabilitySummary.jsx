@@ -1,116 +1,92 @@
 // src/components/AvailabilitySummary.jsx
-import React, { useState, useEffect } from 'react';
-import { getConfirmedBookings, getPencilBookings } from '../services/availabilityService'; 
-import { TOTAL_ROOMS } from '../constants'; // Import TOTAL_ROOMS
+import React, { useState, useEffect, useCallback } from 'react';
+import { getAllBookings } from '../services/availabilityService'; 
+import { TOTAL_ROOMS } from '../constants';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
 
 const AvailabilitySummary = ({ refreshTrigger }) => {
-  const today = new Date();
-  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const getInitialLocalDate = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+  const [selectedLocalDate, setSelectedLocalDate] = useState(getInitialLocalDate());
 
-  const [selectedDate, setSelectedDate] = useState(todayString);
-  const [summaryData, setSummaryData] = useState({
-    totalRooms: TOTAL_ROOMS, // Using imported constant
-    bookedForDay: 0,
-    availableForDay: TOTAL_ROOMS, // Using imported constant
-    dateChecked: today.toLocaleDateString()
+  const convertLocalToUTCDate = (localDate) => {
+    if (!localDate) return null;
+    return new Date(Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()));
+  };
+  
+  const formatDateForDisplay = (utcDate) => {
+    if (!utcDate) return 'N/A';
+    return new Date(utcDate).toLocaleDateString(undefined, { 
+        year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' 
+    });
+  };
+
+  const [summaryData, setSummaryData] = useState({ 
+    totalRooms: TOTAL_ROOMS, bookedForDay: 0, availableForDay: TOTAL_ROOMS,
+    dateChecked: formatDateForDisplay(convertLocalToUTCDate(getInitialLocalDate()))
   });
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
-  useEffect(() => {
-    const updateSummaryForDay = () => {
-      if (!selectedDate) return;
+  const updateSummaryForDay = useCallback(() => {
+    if (!selectedLocalDate) return; setLoadingSummary(true);
+    const selectedUTCDay = convertLocalToUTCDate(selectedLocalDate); 
+    if (!selectedUTCDay) { setLoadingSummary(false); return; } 
 
-      const [year, month, day] = selectedDate.split('-').map(Number);
-      const dateObjForCalc = new Date(year, month - 1, day);
+    const allBookings = getAllBookings(); 
+    let roomsBookedOnSelectedDay = 0;
+    allBookings.forEach(booking => {
+      if (booking.startDate && booking.endDate && 
+          selectedUTCDay.getTime() >= booking.startDate.getTime() && 
+          selectedUTCDay.getTime() <= booking.endDate.getTime()) {
+        roomsBookedOnSelectedDay += booking.numberOfRooms;
+      }
+    });
+    const availableRoomsOnDay = TOTAL_ROOMS - roomsBookedOnSelectedDay;
+    setSummaryData({
+      totalRooms: TOTAL_ROOMS, bookedForDay: roomsBookedOnSelectedDay, availableForDay: availableRoomsOnDay,
+      dateChecked: formatDateForDisplay(selectedUTCDay) 
+    });
+    setLoadingSummary(false);
+  }, [selectedLocalDate]); 
 
-      const dayStart = new Date(dateObjForCalc.getFullYear(), dateObjForCalc.getMonth(), dateObjForCalc.getDate(), 0, 0, 0, 0);
-      const dayEnd = new Date(dateObjForCalc.getFullYear(), dateObjForCalc.getMonth(), dateObjForCalc.getDate(), 23, 59, 59, 999);
+  useEffect(() => { updateSummaryForDay(); }, [selectedLocalDate, refreshTrigger, updateSummaryForDay]);
 
-      const confirmed = getConfirmedBookings();
-      const pencils = getPencilBookings();
-      const allBookingsForDay = [...confirmed, ...pencils];
-      
-      let roomsBookedOnSelectedDay = 0;
-
-      allBookingsForDay.forEach(booking => {
-        const bookingStart = new Date(booking.startDate);
-        const bookingEnd = new Date(booking.endDate);
-
-        if (bookingEnd > dayStart && bookingStart < dayEnd) {
-            const bookingStartDateOnly = new Date(bookingStart.getFullYear(), bookingStart.getMonth(), bookingStart.getDate());
-            const bookingEndDateOnly = new Date(bookingEnd.getFullYear(), bookingEnd.getMonth(), bookingEnd.getDate());
-            const selectedDateOnly = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate());
-
-            if (selectedDateOnly >= bookingStartDateOnly && selectedDateOnly <= bookingEndDateOnly) {
-                roomsBookedOnSelectedDay += booking.numberOfRooms;
-            }
-        }
-      });
-      
-      const availableRoomsToday = TOTAL_ROOMS - roomsBookedOnSelectedDay; // Using imported constant
-      
-      setSummaryData({
-        totalRooms: TOTAL_ROOMS, // Using imported constant
-        bookedForDay: roomsBookedOnSelectedDay, 
-        availableForDay: availableRoomsToday,
-        dateChecked: dateObjForCalc.toLocaleDateString()
-      });
-    };
-
-    updateSummaryForDay();
-  }, [selectedDate, refreshTrigger]);
-
-  const handleDateChange = (event) => {
-    setSelectedDate(event.target.value);
+  const handleDateChange = (localDateFromPicker) => {
+    setSelectedLocalDate(localDateFromPicker ? new Date(localDateFromPicker) : getInitialLocalDate());
   };
 
   const availabilityPercentage = summaryData.totalRooms > 0 ? (summaryData.availableForDay / summaryData.totalRooms) * 100 : 0;
-  
+
   return (
-    <div className="card summary-card">
-      <h2 className="summary-title">Daily Room Availability</h2>
-      
+    <div className="card summary-card elegant-summary">
+      <h2 className="form-section-title">Daily Room Availability Snapshot</h2>
       <div className="form-group">
         <label htmlFor="summary-date-picker" className="form-label">Select Date:</label>
-        <input 
-          type="date" 
-          id="summary-date-picker"
-          className="form-input"
-          value={selectedDate}
-          onChange={handleDateChange}
-        />
+        <DatePicker selected={selectedLocalDate} onChange={handleDateChange}
+          className="form-input" dateFormat="MMMM d, yyyy" id="summary-date-picker" popperPlacement="bottom-start" />
       </div>
-
-      <div className="date-range-display" style={{ marginTop: '15px' }}>
-        <p>
-          <span className="date-info-label">Showing for: </span>
-          <span className="date-info-value">{summaryData.dateChecked}</span>
+      <div className="date-range-display" style={{ marginTop: '15px', textAlign: 'center' }}>
+        <p><span className="date-info-label">Showing For: </span>
+           <span className="date-info-value highlight">{summaryData.dateChecked}</span>
         </p>
       </div>
-      
-      <div className="summary-grid">
-        <div className="summary-item summary-item-blue">
-          <p className="summary-label">Total Rooms</p>
-          <p className="summary-value">{summaryData.totalRooms}</p>
-        </div>
-        <div className="summary-item summary-item-red">
-          <p className="summary-label">Booked on this Day</p>
-          <p className="summary-value">{summaryData.bookedForDay}</p>
-        </div>
-        <div className="summary-item summary-item-green">
-          <p className="summary-label">Available on this Day</p>
-          <p className="summary-value">{summaryData.availableForDay}</p>
-        </div>
-      </div>
-      
-      <div className="progress-bar">
-        <div 
-          className="progress-value"
-          style={{ width: `${availabilityPercentage}%` }}
-        ></div>
-      </div>
-      <p className="progress-text">
-        {availabilityPercentage.toFixed(1)}% rooms available on {summaryData.dateChecked}
-      </p>
+      {loadingSummary ? ( <div className="centered-spinner-container"><div className="spinner-large"></div><p>Loading...</p></div> ) : (
+        <>
+            <div className="summary-grid modern-summary-grid">
+                <div className="summary-item summary-item-blue"><p className="summary-label">Total Rooms</p><p className="summary-value">{summaryData.totalRooms}</p></div>
+                <div className="summary-item summary-item-red"><p className="summary-label">Rooms Booked</p><p className="summary-value">{summaryData.bookedForDay}</p></div>
+                <div className="summary-item summary-item-green"><p className="summary-label">Rooms Available</p><p className="summary-value">{summaryData.availableForDay}</p></div>
+            </div>
+            <div className="progress-bar-container">
+                <div className="progress-bar-labels"><span>{summaryData.bookedForDay} Booked</span><span>{summaryData.availableForDay} Available</span></div>
+                <div className="progress-bar modern-progress-bar">
+                    <div className="progress-value" style={{ width: `${100 - availabilityPercentage}%`, backgroundColor: 'var(--error-color)' }}></div>
+                    <div className="progress-value" style={{ width: `${availabilityPercentage}%`, backgroundColor: 'var(--success-color)' }}></div>
+                </div>
+                <p className="progress-text centered-text"><strong>{availabilityPercentage.toFixed(1)}%</strong> rooms available on {summaryData.dateChecked}</p>
+            </div>
+        </>
+      )}
     </div>
   );
 };

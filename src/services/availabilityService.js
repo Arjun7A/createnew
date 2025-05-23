@@ -1,19 +1,23 @@
 // src/services/availabilityService.js
+import { TOTAL_ROOMS } from '../constants';
 
-import { TOTAL_ROOMS } from '../constants'; // Import from constants.js
+const CONFIRMED_BOOKINGS_STORAGE_KEY = 'hotel_confirmed_bookings_v4_1';
+const PENCIL_BOOKINGS_STORAGE_KEY = 'hotel_pencil_bookings_v4_1';
 
-const CONFIRMED_BOOKINGS_STORAGE_KEY = 'hotel_confirmed_bookings_v2';
-const PENCIL_BOOKINGS_STORAGE_KEY = 'hotel_pencil_bookings_v2';
-// const TOTAL_ROOMS = 133; // Removed local definition
+const normalizeDate = (dateInput) => {
+  if (!dateInput) return null;
+  const d = new Date(dateInput); 
+  if (isNaN(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
 
-// --- Helper to parse bookings from JSON ---
 const parseBookings = (bookingsJson) => {
   if (!bookingsJson) return [];
   try {
     return JSON.parse(bookingsJson).map(booking => ({
       ...booking,
-      startDate: new Date(booking.startDate),
-      endDate: new Date(booking.endDate)
+      startDate: normalizeDate(booking.startDate),
+      endDate: normalizeDate(booking.endDate),
     }));
   } catch (error) {
     console.error('Error parsing bookings from localStorage:', error);
@@ -21,7 +25,15 @@ const parseBookings = (bookingsJson) => {
   }
 };
 
-// --- Getters for specific booking types ---
+const convertBookingsForStorage = (bookings) => {
+    return bookings.map(b => ({
+        ...b,
+        startDate: b.startDate ? normalizeDate(b.startDate).toISOString() : null,
+        endDate: b.endDate ? normalizeDate(b.endDate).toISOString() : null,
+        createdAt: b.createdAt ? new Date(b.createdAt).toISOString() : new Date().toISOString()
+    }));
+};
+
 export const getConfirmedBookings = () => {
   return parseBookings(localStorage.getItem(CONFIRMED_BOOKINGS_STORAGE_KEY));
 };
@@ -30,262 +42,152 @@ export const getPencilBookings = () => {
   return parseBookings(localStorage.getItem(PENCIL_BOOKINGS_STORAGE_KEY));
 };
 
-// --- Generic getBookings (combines for general display) ---
-export const getBookings = () => { 
-  const confirmed = getConfirmedBookings().map(b => ({...b, bookingStatus: 'confirmed'}));
-  const pencil = getPencilBookings().map(b => ({...b, bookingStatus: 'pencil'}));
-  return [...confirmed, ...pencil].sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
+export const getAllBookings = () => {
+  const confirmed = getConfirmedBookings().map(b => ({ ...b, bookingStatus: 'confirmed' }));
+  const pencil = getPencilBookings().map(b => ({ ...b, bookingStatus: 'pencil' }));
+  return [...confirmed, ...pencil].sort((a, b) => {
+    const dateA = a.startDate ? a.startDate.getTime() : 0;
+    const dateB = b.startDate ? b.startDate.getTime() : 0;
+    return dateA - dateB;
+  });
 };
 
+const getDailyBookedCounts = (bookingsList, periodStart, periodEnd) => { 
+  const dailyBooked = {};
+  if (!periodStart || !periodEnd) return dailyBooked;
 
-// --- Internal Helper: Calculates availability against a given list ---
-const calculateAvailabilityInternal = (startDateTime, endDateTime, numberOfRooms, bookingsList) => {
-  const dateBookingMap = {};
-  const checkInDateTime = new Date(startDateTime);
-  const checkOutDateTime = new Date(endDateTime);
-
-  const localCheckInDate = new Date(checkInDateTime.getFullYear(), checkInDateTime.getMonth(), checkInDateTime.getDate());
-  const localCheckOutDate = new Date(checkOutDateTime.getFullYear(), checkOutDateTime.getMonth(), checkOutDateTime.getDate());
-
-  let currentIterDate = new Date(localCheckInDate);
-  while (currentIterDate <= localCheckOutDate) {
-    const isoDateKey = `${currentIterDate.getFullYear()}-${String(currentIterDate.getMonth() + 1).padStart(2, '0')}-${String(currentIterDate.getDate()).padStart(2, '0')}`;
-    dateBookingMap[isoDateKey] = 0;
-    currentIterDate.setDate(currentIterDate.getDate() + 1);
+  let currentDate = new Date(periodStart); 
+  while (currentDate.getTime() <= periodEnd.getTime()) {
+    dailyBooked[currentDate.toISOString().split('T')[0]] = 0;
+    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
   }
 
   bookingsList.forEach(booking => {
-    const bookingStartDateTime = new Date(booking.startDate);
-    const bookingEndDateTime = new Date(booking.endDate);
-
-    if (bookingEndDateTime <= checkInDateTime || bookingStartDateTime >= checkOutDateTime) return;
-
-    const bookingEffectStartDay = new Date(Math.max(bookingStartDateTime.getTime(), localCheckInDate.getTime()));
-    bookingEffectStartDay.setHours(0,0,0,0);
-    let bookingEffectEndDay = new Date(Math.min(bookingEndDateTime.getTime(), 
-        new Date(localCheckOutDate.getFullYear(), localCheckOutDate.getMonth(), localCheckOutDate.getDate(), 23, 59, 59, 999).getTime()
-    ));
-    bookingEffectEndDay.setHours(0,0,0,0);
-
-    let iterOverlapDate = new Date(bookingEffectStartDay);
-    while (iterOverlapDate <= bookingEffectEndDay) {
-      if (iterOverlapDate >= localCheckInDate && iterOverlapDate <= localCheckOutDate) {
-        const isoDateKey = `${iterOverlapDate.getFullYear()}-${String(iterOverlapDate.getMonth() + 1).padStart(2, '0')}-${String(iterOverlapDate.getDate()).padStart(2, '0')}`;
-        if (isoDateKey in dateBookingMap) {
-          dateBookingMap[isoDateKey] += booking.numberOfRooms;
+    if (!booking.startDate || !booking.endDate) return;
+    let iterDate = new Date(booking.startDate); 
+    while (iterDate.getTime() <= booking.endDate.getTime()) {
+      if (iterDate.getTime() >= periodStart.getTime() && iterDate.getTime() <= periodEnd.getTime()) {
+        const isoDateKey = iterDate.toISOString().split('T')[0];
+        if (dailyBooked.hasOwnProperty(isoDateKey)) {
+          dailyBooked[isoDateKey] += booking.numberOfRooms;
         }
       }
-      iterOverlapDate.setDate(iterOverlapDate.getDate() + 1);
+      iterDate.setUTCDate(iterDate.getUTCDate() + 1);
     }
   });
-
-  let minAvailableRooms = TOTAL_ROOMS; // Using imported constant
-  const isoDailyAvailability = {};
-  Object.entries(dateBookingMap).forEach(([isoDateKey, bookedRooms]) => {
-    const availableRooms = TOTAL_ROOMS - bookedRooms; // Using imported constant
-    isoDailyAvailability[isoDateKey] = availableRooms;
-    minAvailableRooms = Math.min(minAvailableRooms, availableRooms);
-  });
-
-  const dailyAvailabilityForDisplay = {};
-  Object.keys(isoDailyAvailability).sort().forEach(isoKey => {
-      const [year, month, day] = isoKey.split('-').map(Number);
-      const displayDate = new Date(year, month - 1, day);
-      dailyAvailabilityForDisplay[displayDate.toLocaleDateString()] = isoDailyAvailability[isoKey];
-  });
-  
-  const checkInTimeStr = checkInDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-  const checkOutTimeStr = checkOutDateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-  return {
-    available: minAvailableRooms >= numberOfRooms,
-    availableRooms: minAvailableRooms,
-    requestedRooms: numberOfRooms,
-    dailyAvailability: dailyAvailabilityForDisplay,
-    startDate: checkInDateTime,
-    endDate: checkOutDateTime,
-    checkInTime: checkInTimeStr,
-    checkOutTime: checkOutTimeStr,
-  };
+  return dailyBooked;
 };
 
-export const checkRoomAvailability = (startDateTime, endDateTime, numberOfRooms, bookingTypeToMake) => {
-  if (bookingTypeToMake === 'confirmed') {
-    const confirmedBookings = getConfirmedBookings();
-    return calculateAvailabilityInternal(startDateTime, endDateTime, numberOfRooms, confirmedBookings);
-  } else { 
-    const allBookings = [...getConfirmedBookings(), ...getPencilBookings()];
-    return calculateAvailabilityInternal(startDateTime, endDateTime, numberOfRooms, allBookings);
+export const checkAvailabilityForRange = (startDate, endDate, numberOfRooms, bookingsToExclude = []) => {
+  if (!startDate || !endDate || startDate.getTime() > endDate.getTime()) {
+    return { isAvailable: false, minAvailableRoomsInPeriod: 0, requestedRooms: numberOfRooms, dailyBreakdown: {}, checkedStart: startDate, checkedEnd: endDate, error: "Invalid date range" };
   }
+  
+  const allExistingBookings = getAllBookings().filter(b => !bookingsToExclude.some(ex => ex.id === b.id));
+  const dailyBookedCounts = getDailyBookedCounts(allExistingBookings, startDate, endDate);
+
+  let minAvailableOnAnyDay = TOTAL_ROOMS;
+  const dailyAvailabilityDetails = {};
+  let currentCheckDate = new Date(startDate);
+  while (currentCheckDate.getTime() <= endDate.getTime()) {
+    const isoDateKey = currentCheckDate.toISOString().split('T')[0];
+    const bookedOnDay = dailyBookedCounts[isoDateKey] || 0;
+    const availableOnDay = TOTAL_ROOMS - bookedOnDay;
+    dailyAvailabilityDetails[isoDateKey] = availableOnDay;
+    minAvailableOnAnyDay = Math.min(minAvailableOnAnyDay, availableOnDay);
+    currentCheckDate.setUTCDate(currentCheckDate.getUTCDate() + 1);
+  }
+
+  return { isAvailable: minAvailableOnAnyDay >= numberOfRooms, minAvailableRoomsInPeriod: minAvailableOnAnyDay, requestedRooms: numberOfRooms, dailyBreakdown: dailyAvailabilityDetails, checkedStart: startDate, checkedEnd: endDate };
+};
+
+export const findAvailableSlots = (searchPeriodStart, searchPeriodEnd, durationDays, numberOfRooms) => {
+  const availableSlots = [];
+  if (durationDays < 1 || !searchPeriodStart || !searchPeriodEnd || searchPeriodStart.getTime() > searchPeriodEnd.getTime()) return availableSlots;
+
+  let potentialSlotStart = new Date(searchPeriodStart);
+  while (potentialSlotStart.getTime() <= searchPeriodEnd.getTime()) {
+    const potentialSlotEnd = new Date(potentialSlotStart);
+    potentialSlotEnd.setUTCDate(potentialSlotEnd.getUTCDate() + durationDays - 1);
+
+    if (potentialSlotEnd.getTime() > searchPeriodEnd.getTime()) {
+      break; 
+    }
+
+    const availabilityResult = checkAvailabilityForRange(potentialSlotStart, potentialSlotEnd, numberOfRooms);
+    if (availabilityResult.isAvailable) {
+      availableSlots.push({
+        startDate: new Date(potentialSlotStart), 
+        endDate: new Date(potentialSlotEnd),     
+        minAvailableRoomsInSlot: availabilityResult.minAvailableRoomsInPeriod
+      });
+    }
+    potentialSlotStart.setUTCDate(potentialSlotStart.getUTCDate() + 1);
+  }
+  return availableSlots;
 };
 
 export const saveBooking = (bookingData) => {
-  const newBookingId = Date.now();
+  const newBookingId = bookingData.id || Date.now(); 
+  if (!bookingData.startDate || !bookingData.endDate) throw new Error("Invalid start or end date for booking.");
 
-  if (bookingData.bookingStatus === 'confirmed') {
-    const currentConfirmedBookings = getConfirmedBookings();
-    const availabilityResult = calculateAvailabilityInternal(
-      bookingData.startDate,
-      bookingData.endDate,
-      bookingData.numberOfRooms,
-      currentConfirmedBookings
-    );
+  const exclusion = bookingData.id ? [{id: bookingData.id}] : [];
+  const availabilityResult = checkAvailabilityForRange(bookingData.startDate, bookingData.endDate, bookingData.numberOfRooms, exclusion);
 
-    if (availabilityResult.available) {
-      const newConfirmedBooking = { ...bookingData, id: newBookingId };
-      const updatedConfirmedBookings = [...currentConfirmedBookings, newConfirmedBooking];
-      localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(updatedConfirmedBookings));
+  if (!availabilityResult.isAvailable) throw new Error(`Booking failed: Only ${availabilityResult.minAvailableRoomsInPeriod} rooms available during the selected period (requested ${bookingData.numberOfRooms}).`);
 
-      const currentPencilBookings = getPencilBookings();
-      const newConfirmedStart = new Date(newConfirmedBooking.startDate);
-      const newConfirmedEnd = new Date(newConfirmedBooking.endDate);
-      
-      const pencilBookingsToKeep = currentPencilBookings.filter(pb => {
-        const pencilStart = new Date(pb.startDate);
-        const pencilEnd = new Date(pb.endDate);
-        return !(newConfirmedStart < pencilEnd && newConfirmedEnd > pencilStart);
-      });
+  const newBookingToStore = { ...bookingData, id: newBookingId, createdAt: bookingData.createdAt ? new Date(bookingData.createdAt) : new Date() };
+  delete newBookingToStore.originalBookingStatus;
 
-      if (pencilBookingsToKeep.length < currentPencilBookings.length) {
-        console.log(`Overridden ${currentPencilBookings.length - pencilBookingsToKeep.length} pencil booking(s).`);
-        localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(pencilBookingsToKeep));
-      }
-      return newConfirmedBooking;
-    } else {
-      throw new Error(
-        `Confirmed booking failed: Only ${availabilityResult.availableRooms} rooms available (considering other confirmed bookings).`
-      );
-    }
-  } else if (bookingData.bookingStatus === 'pencil') {
-    const allExistingBookings = [...getConfirmedBookings(), ...getPencilBookings()];
-    const availabilityResult = calculateAvailabilityInternal(
-      bookingData.startDate,
-      bookingData.endDate,
-      bookingData.numberOfRooms,
-      allExistingBookings
-    );
-
-    if (availabilityResult.available) {
-      const newPencilBooking = { ...bookingData, id: newBookingId };
-      const updatedPencilBookings = [...getPencilBookings(), newPencilBooking];
-      localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(updatedPencilBookings));
-      return newPencilBooking;
-    } else {
-      throw new Error(
-        `Pencil booking failed: Only ${availabilityResult.availableRooms} rooms available (considering all existing bookings).`
-      );
-    }
-  } else {
-    throw new Error("Invalid booking status provided.");
-  }
+  if (newBookingToStore.bookingStatus === 'confirmed') {
+    let bookings = getConfirmedBookings().filter(b => b.id !== newBookingToStore.id);
+    bookings.push(newBookingToStore); // newBookingToStore already has UTC Date objects
+    localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
+  } else if (newBookingToStore.bookingStatus === 'pencil') {
+    let bookings = getPencilBookings().filter(b => b.id !== newBookingToStore.id);
+    bookings.push(newBookingToStore); // newBookingToStore already has UTC Date objects
+    localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
+  } else throw new Error("Invalid booking status.");
+  
+  return newBookingToStore; 
 };
 
 export const getConsolidatedBookingsForDisplay = () => {
-  const confirmedBookings = getConfirmedBookings().map(b => ({ ...b, bookingStatus: 'confirmed', type: 'Confirmed' }));
-  const pencilBookings = getPencilBookings().map(b => ({ ...b, bookingStatus: 'pencil', type: 'Pencil' }));
-  const allBookings = [...confirmedBookings, ...pencilBookings];
-
-  const dailyRoomCounts = {}; 
-
-  allBookings.forEach(booking => {
-    const checkInDate = new Date(booking.startDate);
-    checkInDate.setHours(0, 0, 0, 0);
-    const checkOutDate = new Date(booking.endDate);
-    checkOutDate.setHours(0, 0, 0, 0);
-
-    let currentIterDate = new Date(checkInDate);
-    while (currentIterDate <= checkOutDate) {
-      const isoDateKey = `${currentIterDate.getFullYear()}-${String(currentIterDate.getMonth() + 1).padStart(2, '0')}-${String(currentIterDate.getDate()).padStart(2, '0')}`;
-      if (!dailyRoomCounts[isoDateKey]) {
-        dailyRoomCounts[isoDateKey] = { confirmed: 0, pencil: 0, total: 0 };
-      }
-      if (booking.bookingStatus === 'confirmed') {
-        dailyRoomCounts[isoDateKey].confirmed += booking.numberOfRooms;
-      } else {
-        dailyRoomCounts[isoDateKey].pencil += booking.numberOfRooms;
-      }
-      dailyRoomCounts[isoDateKey].total += booking.numberOfRooms;
-      currentIterDate.setDate(currentIterDate.getDate() + 1);
-    }
-  });
-
-  const displayBookings = allBookings.filter(booking => {
-    if (booking.bookingStatus === 'pencil') {
-      let canShowPencil = true;
-      const checkInDate = new Date(booking.startDate);
-      checkInDate.setHours(0, 0, 0, 0);
-      const checkOutDate = new Date(booking.endDate);
-      checkOutDate.setHours(0, 0, 0, 0);
-      
-      let currentIterDate = new Date(checkInDate);
-      while (currentIterDate <= checkOutDate) {
-        const isoDateKey = `${currentIterDate.getFullYear()}-${String(currentIterDate.getMonth() + 1).padStart(2, '0')}-${String(currentIterDate.getDate()).padStart(2, '0')}`;
-        if (dailyRoomCounts[isoDateKey] && dailyRoomCounts[isoDateKey].total > TOTAL_ROOMS) { // Using imported constant
-          canShowPencil = false; 
-          break;
-        }
-        currentIterDate.setDate(currentIterDate.getDate() + 1);
-      }
-      return canShowPencil;
-    }
-    return true; 
-  });
-
-  return displayBookings.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  return getAllBookings().map(b => ({ ...b, type: b.bookingStatus ? (b.bookingStatus.charAt(0).toUpperCase() + b.bookingStatus.slice(1)) : 'Unknown' }));
 };
-
 
 export const updateBooking = (bookingId, originalBookingStatus, updatedBookingData) => {
-  const newStatus = updatedBookingData.bookingStatus || originalBookingStatus;
+  if (!updatedBookingData.startDate || !updatedBookingData.endDate) throw new Error("Invalid start or end date for update.");
 
-  if (originalBookingStatus === 'confirmed') {
-    const bookings = getConfirmedBookings();
-    const updated = bookings.filter(b => b.id !== bookingId);
-    localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(updated));
-  } else if (originalBookingStatus === 'pencil') {
-    const bookings = getPencilBookings();
-    const updated = bookings.filter(b => b.id !== bookingId);
-    localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(updated));
+  const availabilityResult = checkAvailabilityForRange(updatedBookingData.startDate, updatedBookingData.endDate, updatedBookingData.numberOfRooms, [{ id: bookingId }]);
+  if (!availabilityResult.isAvailable) throw new Error(`Update failed: Only ${availabilityResult.minAvailableRoomsInPeriod} rooms available (requested ${updatedBookingData.numberOfRooms}). Consider other bookings.`);
+
+  const statusLower = originalBookingStatus ? originalBookingStatus.toLowerCase() : '';
+  if (statusLower === 'confirmed') {
+    const bookings = getConfirmedBookings().filter(b => b.id !== bookingId);
+    localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
+  } else if (statusLower === 'pencil') {
+    const bookings = getPencilBookings().filter(b => b.id !== bookingId);
+    localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
   } else {
-      throw new Error("Invalid original booking status for update.");
+      // If original status is unknown or different, it might not exist in those lists.
+      // This is okay as saveBooking will add it to the correct new list.
   }
 
-  try {
-    return saveBooking({ ...updatedBookingData, id: bookingId, bookingStatus: newStatus });
-  } catch (error) {
-    console.error("Error saving updated booking after deleting original, data might be inconsistent:", error);
-    throw error;
-  }
+  const bookingToSave = { ...updatedBookingData, id: bookingId }; // bookingToSave has UTC Date objects
+  return saveBooking(bookingToSave); 
 };
 
-export const deleteBooking = (bookingId, bookingStatus) => {
-  if (bookingStatus === 'confirmed' || bookingStatus === 'Confirmed') {
-    const bookings = getConfirmedBookings();
-    const updatedBookings = bookings.filter(b => b.id !== bookingId);
-    localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(updatedBookings));
-  } else if (bookingStatus === 'pencil' || bookingStatus === 'Pencil') {
-    const bookings = getPencilBookings();
-    const updatedBookings = bookings.filter(b => b.id !== bookingId);
-    localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(updatedBookings));
-  } else {
-     throw new Error(`Invalid booking status "${bookingStatus}" for delete operation.`);
-  }
+export const deleteBooking = (bookingId, bookingStatus) => { 
+  let bookings; let storageKey; const statusLower = bookingStatus ? bookingStatus.toLowerCase() : '';
+  if (statusLower === 'confirmed') { bookings = getConfirmedBookings(); storageKey = CONFIRMED_BOOKINGS_STORAGE_KEY; }
+  else if (statusLower === 'pencil') { bookings = getPencilBookings(); storageKey = PENCIL_BOOKINGS_STORAGE_KEY; }
+  else throw new Error(`Invalid booking status "${bookingStatus}" for delete.`);
+  const updatedBookings = bookings.filter(b => b.id !== bookingId);
+  localStorage.setItem(storageKey, JSON.stringify(convertBookingsForStorage(updatedBookings)));
   return { success: true };
 };
 
-export const clearAllBookings = () => {
-  localStorage.removeItem(CONFIRMED_BOOKINGS_STORAGE_KEY);
-  localStorage.removeItem(PENCIL_BOOKINGS_STORAGE_KEY);
-};
-
-export const checkRoomAvailabilityForUpdate = (startDateTime, endDateTime, numberOfRooms, bookingIdToExclude, bookingStatusOfEditedBooking) => {
-    let bookingsToCheckAgainst;
-    if (bookingStatusOfEditedBooking === 'confirmed') {
-        bookingsToCheckAgainst = getConfirmedBookings().filter(b => b.id !== bookingIdToExclude);
-    } else { 
-        const confirmed = getConfirmedBookings();
-        const pencils = getPencilBookings().filter(b => b.id !== bookingIdToExclude);
-        bookingsToCheckAgainst = [...confirmed, ...pencils];
-    }
-    return calculateAvailabilityInternal(startDateTime, endDateTime, numberOfRooms, bookingsToCheckAgainst);
+export const clearAllBookings = () => { 
+  localStorage.removeItem(CONFIRMED_BOOKINGS_STORAGE_KEY); localStorage.removeItem(PENCIL_BOOKINGS_STORAGE_KEY);
 };

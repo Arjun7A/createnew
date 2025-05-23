@@ -2,11 +2,17 @@
 export const TOTAL_ROOMS = 133;
 
 export const PROGRAM_TYPES = [
-  { value: 'CTP', label: 'CTP (Certificate Training Program)' }, // Example full label
-  { value: 'LDP', label: 'LDP (Leadership Development Program)' },
-  { value: 'MDP', label: 'MDP (Management Development Program)' },
-  { value: 'OTHERS', label: 'OTHERS (Please specify)' }
+  { value: 'OPEN_LDP', label: 'Open LDP' },
+  { value: 'CUSTOM_LDP', label: 'Custom LDP' },
+  { value: 'OPEN_MDP', label: 'Open MDP' },
+  { value: 'CTP', label: 'CTP' },
+  { value: 'OTHER_BOOKINGS', label: 'Other Bookings' }
 ];
 
-// You can also define just the values if labels are simple
-// export const PROGRAM_TYPE_VALUES = ['CTP', 'LDP', 'MDP', 'OTHERS'];
+export const OTHER_BOOKING_CATEGORIES = [
+  { value: '', label: 'Select Category...' },
+  { value: 'DIRECTOR_DEAN_OFFICE', label: 'Director/Dean office' },
+  { value: 'PROGRAMME_OFFICE', label: 'Programme office' },
+  { value: 'CONFERENCE', label: 'Conference' },
+  { value: 'CLIENT_BOOKINGS', label: 'Client bookings' }
+];
