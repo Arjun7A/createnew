@@ -25,7 +25,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         const date = new Date(); date.setDate(date.getDate() + offset); date.setHours(0, 0, 0, 0); return date;
     };
     const initialSearchPeriodStartLocal = getInitialLocalDate(); 
-    const initialSearchPeriodEndLocal = getInitialLocalDate(7); // Default latest checkout 7 days from now
+    const initialSearchPeriodEndLocal = getInitialLocalDate(7); 
 
     const [formData, setFormData] = useState({ programTitle: '', programType: '', otherBookingCategory: '', numberOfRooms: 1, bookingStatus: 'pencil' });
     const [searchCriteria, setSearchCriteria] = useState({ 
@@ -60,15 +60,22 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                     durationNights = Math.max(1, durationNights);
                 }
             }
-            setSearchCriteria(prev => ({ ...prev, 
-                searchPeriodStart: calStartDateLocal, 
-                stayDuration: durationNights,
-                // Auto-adjust latest checkout if current one is too early for new duration
-                searchPeriodEnd: new Date(Math.max(
-                    (prev.searchPeriodEnd || initialSearchPeriodEndLocal).getTime(), 
-                    new Date(calStartDateLocal.getTime() + durationNights * 24 * 60 * 60 * 1000).getTime()
-                ))
-            }));
+            setSearchCriteria(prev => {
+                const newStart = calStartDateLocal;
+                const newDuration = durationNights;
+                let newEnd = prev.searchPeriodEnd; 
+                if (newStart instanceof Date && newDuration > 0) {
+                    const minCheckoutDate = new Date(newStart.getTime() + newDuration * 24 * 60 * 60 * 1000);
+                    if (!newEnd || newEnd.getTime() < minCheckoutDate.getTime()) { // Ensure newEnd is valid Date
+                        newEnd = minCheckoutDate;
+                    }
+                }
+                return { ...prev, 
+                    searchPeriodStart: newStart, 
+                    stayDuration: newDuration,
+                    searchPeriodEnd: newEnd || initialSearchPeriodEndLocal // Fallback if newEnd became invalid
+                };
+            });
             setAvailableSlots([]); setSelectedSlot(null); setAvailabilityCheckResult(null); 
             setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
         }
@@ -87,43 +94,99 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
 
     const handleFormInputChange = (e) => { 
         const { name, value } = e.target; 
-        const newNumberOfRooms = name === 'numberOfRooms' ? parseInt(value, 10) || 1 : formData.numberOfRooms;
         setFormData(prev => {
-            const newState = { ...prev, [name]: name === 'numberOfRooms' ? newNumberOfRooms : value };
+            const newState = { ...prev };
+            if (name === 'numberOfRooms') {
+                if (value === "") newState[name] = ""; 
+                else {
+                    const numValue = parseInt(value, 10);
+                    newState[name] = isNaN(numValue) ? prev.numberOfRooms : numValue; // Keep current if NaN during typing
+                }
+            } else {
+                newState[name] = value;
+            }
             if (name === 'programType' && value !== 'OTHER_BOOKINGS') newState.otherBookingCategory = '';
             return newState;
         });
-        if (name === 'numberOfRooms' && selectedSlot) {
-            reCheckSelectedSlotAvailability(selectedSlot, newNumberOfRooms);
+
+        if (name === 'numberOfRooms') {
+            const numValue = parseInt(value, 10);
+            const roomsToRecheck = isNaN(numValue) || numValue < 1 ? formData.numberOfRooms : Math.min(numValue, TOTAL_ROOMS); // Use current state if NaN for recheck
+            if (selectedSlot && roomsToRecheck >=1) { // Only recheck if roomsToRecheck is valid
+                 reCheckSelectedSlotAvailability(selectedSlot, roomsToRecheck);
+            }
+        }
+    };
+    
+    const handleNumberOfRoomsBlur = (e) => {
+        const { value } = e.target;
+        const numValue = parseInt(value, 10);
+        const validatedRooms = isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, TOTAL_ROOMS);
+        setFormData(prev => ({ ...prev, numberOfRooms: validatedRooms }));
+        if (selectedSlot) { // Re-check with final validated value
+            reCheckSelectedSlotAvailability(selectedSlot, validatedRooms);
         }
     };
 
     const handleSearchCriteriaChange = (name, value) => { 
-        const currentSearch = {...searchCriteria};
-        const newValue = (name === 'stayDuration' || name === 'numberOfRooms') ? (parseInt(value, 10) || 1) : value;
-        currentSearch[name] = newValue;
+        setSearchCriteria(prev => {
+            const currentSearch = {...prev};
+            if (name === 'stayDuration') {
+                if (value === "") currentSearch[name] = ""; 
+                else {
+                    const numValue = parseInt(value, 10);
+                    currentSearch[name] = isNaN(numValue) ? prev.stayDuration : numValue;
+                }
+            } else { 
+                currentSearch[name] = value;
+            }
 
-        // Ensure latest checkout is always after earliest checkin + duration
-        if (name === 'searchPeriodStart' || name === 'stayDuration') {
-            const earliestCheckin = name === 'searchPeriodStart' ? newValue : currentSearch.searchPeriodStart;
-            const duration = name === 'stayDuration' ? newValue : currentSearch.stayDuration;
-            if (earliestCheckin instanceof Date && duration > 0) {
-                const minCheckoutDate = new Date(earliestCheckin.getTime() + duration * 24 * 60 * 60 * 1000);
-                if (currentSearch.searchPeriodEnd.getTime() < minCheckoutDate.getTime()) {
-                    currentSearch.searchPeriodEnd = minCheckoutDate;
+            if ((name === 'searchPeriodStart' || name === 'stayDuration') && currentSearch.searchPeriodStart instanceof Date) {
+                const earliestCheckin = currentSearch.searchPeriodStart;
+                const duration = (name === 'stayDuration' && value === "") ? prev.stayDuration : parseInt(currentSearch.stayDuration, 10);
+
+                if (earliestCheckin && typeof duration === 'number' && duration > 0) {
+                    const minCheckoutDate = new Date(earliestCheckin.getTime() + duration * 24 * 60 * 60 * 1000);
+                    if (!currentSearch.searchPeriodEnd || currentSearch.searchPeriodEnd.getTime() < minCheckoutDate.getTime()) {
+                        currentSearch.searchPeriodEnd = minCheckoutDate;
+                    }
                 }
             }
-        }
-        setSearchCriteria(currentSearch);
+            return currentSearch;
+        });
         setAvailableSlots([]); setSelectedSlot(null); setAvailabilityCheckResult(null); 
         setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
     };
 
+    const handleStayDurationBlur = (e) => {
+        const { value } = e.target;
+        const numValue = parseInt(value, 10);
+        setSearchCriteria(prev => {
+            const updatedDuration = isNaN(numValue) || numValue < 1 ? 1 : numValue;
+            const newCriteria = { ...prev, stayDuration: updatedDuration };
+            if (newCriteria.searchPeriodStart instanceof Date && updatedDuration > 0) {
+                const minCheckoutDate = new Date(newCriteria.searchPeriodStart.getTime() + updatedDuration * 24 * 60 * 60 * 1000);
+                if (!newCriteria.searchPeriodEnd || newCriteria.searchPeriodEnd.getTime() < minCheckoutDate.getTime()) {
+                    newCriteria.searchPeriodEnd = minCheckoutDate;
+                }
+            }
+            return newCriteria;
+        });
+    };
+
     const handleFindAvailableSlots = async () => {
-        const currentRooms = parseInt(formData.numberOfRooms, 10) || 1;
-        const durationNights = parseInt(searchCriteria.stayDuration, 10) || 1; 
-        if (durationNights < 1) {addToast('Number of nights must be at least 1.', 'error'); return;}
-        if (currentRooms < 1 || currentRooms > TOTAL_ROOMS) {addToast(`Rooms: 1-${TOTAL_ROOMS}.`, 'error'); return;}
+        const numRoomsFinal = parseInt(formData.numberOfRooms,10);
+        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
+            addToast(`Please enter a valid number of rooms (1-${TOTAL_ROOMS}).`, 'error');
+            setFormData(prev => ({...prev, numberOfRooms: 1})); 
+            return;
+        }
+        const durationNightsFinal = parseInt(searchCriteria.stayDuration,10);
+        if (isNaN(durationNightsFinal) || durationNightsFinal < 1) {
+            addToast('Please enter a valid number of nights (at least 1).', 'error');
+            setSearchCriteria(prev => ({...prev, stayDuration: 1})); 
+            return;
+        }
 
         const earliestCheckInUTC = convertLocalToUTCDate(searchCriteria.searchPeriodStart);
         const latestCheckOutByUTC = convertLocalToUTCDate(searchCriteria.searchPeriodEnd);
@@ -133,7 +196,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         }
         
         const minPossibleCheckout = new Date(earliestCheckInUTC);
-        minPossibleCheckout.setUTCDate(minPossibleCheckout.getUTCDate() + durationNights);
+        minPossibleCheckout.setUTCDate(minPossibleCheckout.getUTCDate() + durationNightsFinal);
         if (latestCheckOutByUTC.getTime() < minPossibleCheckout.getTime()){
             addToast('Latest Check-out By date is too early for the number of nights & earliest check-in.', 'error'); return;
         }
@@ -141,18 +204,16 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         setIsFindingSlots(true); setSelectedSlot(null); setAvailabilityCheckResult(null); setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
         
         try {
-            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNights, currentRooms);
+            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
             setAvailableSlots(slots); 
-            if (slots.length === 0) addToast('No available slots found for criteria.', 'warning');
-            else addToast(`Found ${slots.length} potential ${durationNights}-night stay(s).`, 'success');
+            if (slots.length === 0) addToast('No available slots found.', 'warning');
+            else addToast(`Found ${slots.length} potential ${durationNightsFinal}-night stay(s).`, 'success');
 
             const displayPeriodEndForOverlap = new Date(latestCheckOutByUTC);
             displayPeriodEndForOverlap.setUTCDate(displayPeriodEndForOverlap.getUTCDate() - 1); 
             const overlappingBookings = getBookingsInPeriod(earliestCheckInUTC, displayPeriodEndForOverlap);
             setBookingsInSearchPeriod(overlappingBookings);
-            if (overlappingBookings.length > 0) {
-                setShowPeriodBookingsDetails(true); 
-            }
+            if (overlappingBookings.length > 0) setShowPeriodBookingsDetails(true); 
         } catch (error) { addToast(`Error during search: ${error.message}`, 'error'); }
         finally { setIsFindingSlots(false); }
     };
@@ -164,25 +225,48 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             return;
         }
         setSelectedSlot(slotWithExclusiveEndDate);
-        reCheckSelectedSlotAvailability(slotWithExclusiveEndDate, formData.numberOfRooms);
+        // Use final validated number of rooms for re-check
+        const numRoomsFinal = parseInt(formData.numberOfRooms,10) || 1;
+        reCheckSelectedSlotAvailability(slotWithExclusiveEndDate, numRoomsFinal);
     };
 
     const validateBookingForm = () => {
         if (!formData.programTitle.trim()) { addToast('Program title is required.', 'error'); return false; }
         if (!formData.programType) { addToast('Program type is required.', 'error'); return false; }
         if (formData.programType === 'OTHER_BOOKINGS' && !formData.otherBookingCategory) { addToast('Category for "Other Bookings" is required.', 'error'); return false; }
+        
+        const numRoomsFinal = parseInt(formData.numberOfRooms,10);
+        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
+            addToast(`Number of rooms must be between 1 and ${TOTAL_ROOMS}.`, 'error'); return false;
+        }
+        
         if (!selectedSlot) { addToast('Please select an available stay period.', 'error'); return false; }
         if (!availabilityCheckResult) { addToast('Availability not confirmed. Select a slot.', 'error'); return false; }
         if (!availabilityCheckResult.isAvailable) { addToast('Selected slot is not available for the requested rooms.', 'error'); return false;}
         return true;
     };
     const handleBookRooms = async () => {
-        if (!validateBookingForm()) return; setIsBooking(true);
+        if (!validateBookingForm()) return; 
+        
+        // Ensure final validated numbers are used for payload
+        const finalNumberOfRooms = parseInt(formData.numberOfRooms, 10) || 1;
+        const finalStayDuration = parseInt(searchCriteria.stayDuration, 10) || 1;
+
+        // Double check selectedSlot just before booking
+        if (!selectedSlot || !selectedSlot.startDate || !selectedSlot.endDate) {
+            addToast("Selected slot data is missing. Please re-select a slot.", "error");
+            return;
+        }
+        // Recalculate expected endDate for the slot based on current stayDuration if critical
+        // For now, assume selectedSlot.endDate is correct from slot selection.
+
+        setIsBooking(true);
         try {
             const bookingPayload = {
                 programTitle: formData.programTitle, programType: formData.programType,
                 ...(formData.programType === 'OTHER_BOOKINGS' && { otherBookingCategory: formData.otherBookingCategory }),
-                numberOfRooms: parseInt(formData.numberOfRooms, 10), bookingStatus: formData.bookingStatus,
+                numberOfRooms: finalNumberOfRooms, 
+                bookingStatus: formData.bookingStatus,
                 startDate: selectedSlot.startDate, 
                 endDate: selectedSlot.endDate, 
             };
@@ -221,14 +305,43 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                         <DatePicker selected={searchCriteria.searchPeriodEnd} 
                             onChange={date => handleSearchCriteriaChange('searchPeriodEnd', date)}
                             selectsEnd startDate={searchCriteria.searchPeriodStart} endDate={searchCriteria.searchPeriodEnd}
-                            minDate={searchCriteria.searchPeriodStart ? new Date(new Date(searchCriteria.searchPeriodStart).getTime() + (searchCriteria.stayDuration * 24 * 60 * 60 * 1000)) : getInitialLocalDate(1)}
+                            minDate={searchCriteria.searchPeriodStart && typeof searchCriteria.stayDuration === 'number' && searchCriteria.stayDuration > 0 ? 
+                                new Date(new Date(searchCriteria.searchPeriodStart).getTime() + (parseInt(searchCriteria.stayDuration.toString(),10) * 24 * 60 * 60 * 1000)) : 
+                                getInitialLocalDate(1)}
                             className="form-input" dateFormat="MMMM d, yyyy" popperPlacement="bottom-start" />
                         </div>
                     </div>
                 </div>
                 <div className="grid grid-halves"> 
-                    <div><div className="form-group"><label className="form-label">Number of Nights</label><input type="number" name="stayDuration" value={searchCriteria.stayDuration} onChange={(e) => handleSearchCriteriaChange('stayDuration', e.target.value)} min="1" className="form-input"/></div></div>
-                    <div><div className="form-group"><label className="form-label">Number of Rooms</label><input type="number" name="numberOfRooms" value={formData.numberOfRooms} onChange={handleFormInputChange} min="1" max={TOTAL_ROOMS} className="form-input"/><p className="form-hint">Max {TOTAL_ROOMS} rooms.</p></div></div>
+                    <div>
+                        <div className="form-group">
+                            <label className="form-label">Number of Nights</label>
+                            <input 
+                                type="text" // Changed to text to allow empty string during typing
+                                name="stayDuration" 
+                                value={searchCriteria.stayDuration} 
+                                onChange={(e) => handleSearchCriteriaChange('stayDuration', e.target.value)}
+                                onBlur={handleStayDurationBlur}
+                                className="form-input"
+                                placeholder="e.g., 1"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <div className="form-group">
+                            <label className="form-label">Number of Rooms</label>
+                            <input 
+                                type="text" // Changed to text
+                                name="numberOfRooms" 
+                                value={formData.numberOfRooms} 
+                                onChange={handleFormInputChange}
+                                onBlur={handleNumberOfRoomsBlur}
+                                className="form-input"
+                                placeholder="e.g., 1"
+                            />
+                            <p className="form-hint">Max {TOTAL_ROOMS} rooms.</p>
+                        </div>
+                    </div>
                 </div>
                 <button onClick={handleFindAvailableSlots} disabled={isFindingSlots || isBooking} className="btn btn-primary btn-full-width">{isFindingSlots ? <><div className="spinner"></div> Finding...</> : "Find Available Stay Periods"}</button>
             </div>
@@ -260,13 +373,13 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                     <h3 className="step-title">Step 2: Select an Available Stay Period</h3>
                     <div className="available-slots-container">
                         {availableSlots.map((slot, index) => ( 
-                        <div key={slot.startDate ? slot.startDate.toISOString() : `slot-${index}`}
+                        <div key={slot.startDate ? slot.startDate.toISOString() + '-' + index : `slot-${index}`}
                             className={`slot-card ${selectedSlot && selectedSlot.startDate && slot.startDate && selectedSlot.startDate.getTime() === slot.startDate.getTime() ? 'selected' : ''}`}
                             onClick={() => handleSelectSlot(slot)} role="button" tabIndex={0} onKeyPress={(e) => e.key === 'Enter' && handleSelectSlot(slot)} >
                             <p><strong>Available Slot {index + 1}</strong></p>
                             <p>Check-in: {formatDateForDisplay(slot.startDate)}</p> 
                             <p>Check-out: {formatDateForDisplay(slot.endDate)} (Last night: {formatInclusiveLastDayForDisplay(slot.endDate)})</p> 
-                            <p>{searchCriteria.stayDuration} nights</p>
+                            <p>{parseInt(searchCriteria.stayDuration.toString(),10) || 1} nights</p>
                             <p>Min. rooms free: <span className="highlight">{slot.minAvailableRoomsInSlot}</span></p>
                         </div>
                         ))}
@@ -277,12 +390,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             {selectedSlot && availabilityCheckResult && ( 
                 <div className={`result-card ${availabilityCheckResult.isAvailable ? 'result-success' : 'result-error'}`}>
                     <h3 className="result-title">{ availabilityCheckResult.isAvailable ? `Slot: ${formData.numberOfRooms} Rooms Available!` : `Slot: Only ${availabilityCheckResult.minAvailableRoomsInPeriod} Rooms Available (Requested ${formData.numberOfRooms})`}</h3>
-                    <p>Period: {formatDateForDisplay(selectedSlot.startDate)} to {formatInclusiveLastDayForDisplay(selectedSlot.endDate)} ({searchCriteria.stayDuration} nights)</p> 
+                    <p>Period: {formatDateForDisplay(selectedSlot.startDate)} to {formatInclusiveLastDayForDisplay(selectedSlot.endDate)} ({parseInt(searchCriteria.stayDuration.toString(),10) || 1} nights)</p> 
                     {availabilityCheckResult.dailyBreakdown && (
                          <div className="daily-availability-compact"><h4>Daily Available Rooms:</h4><ul>
                             {Object.entries(availabilityCheckResult.dailyBreakdown).sort(([dA], [dB]) => new Date(dA).getTime() - new Date(dB).getTime())
                             .map(([dateISO, available]) => ( 
-                            <li key={dateISO}>{formatDateForDisplay(new Date(dateISO + "T00:00:00.000Z"))}: <strong className={available < formData.numberOfRooms ? 'text-error' : 'text-success'}>{available}</strong></li>
+                            <li key={dateISO}>{formatDateForDisplay(new Date(dateISO + "T00:00:00.000Z"))}: <strong className={available < (parseInt(formData.numberOfRooms.toString(),10) || 1) ? 'text-error' : 'text-success'}>{available}</strong></li>
                             ))}</ul>
                         </div>
                     )}
