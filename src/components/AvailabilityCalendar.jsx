@@ -41,13 +41,12 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
     try {
       const displayBookings = getConsolidatedBookingsForDisplay(); 
       const events = displayBookings.map(booking => {
-        const exclusiveEndDate = new Date(booking.endDate); 
-        exclusiveEndDate.setUTCDate(exclusiveEndDate.getUTCDate() + 1); 
+        // booking.endDate is EXCLUSIVE check-out day, which is what RBC expects for 'end' of allDay events
         return {
             id: booking.id,
             title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms) - ${booking.bookingStatus}`,
-            start: booking.startDate,         
-            end: exclusiveEndDate, 
+            start: booking.startDate,       
+            end: booking.endDate,     
             allDay: true, 
             resource: booking 
         };
@@ -75,7 +74,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
   const handleViewChange = (newView) => { setView(newView); };
   const handleSelectSlot = ({ start, end, action, slots }) => { 
     if (onDateSelect) {
-      let actualEndDateLocal = new Date(end);
+      let actualEndDateLocal = new Date(end); 
       if ((action === 'select' || action === 'click') && slots.length >= 1) {
         if (start.getTime() !== end.getTime() || (view === Views.MONTH && action === 'click' && slots.length === 1 && moment(end).isAfter(moment(start), 'day'))) {
              actualEndDateLocal.setDate(actualEndDateLocal.getDate() - 1);
@@ -105,11 +104,13 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
           view={view} onView={handleViewChange} date={currentCalDate} onNavigate={handleNavigate} 
           selectable onSelectSlot={handleSelectSlot}
           tooltipAccessor={(event) => {
-            const startDateStr=moment.utc(event.start).format('MMM DD, YYYY'),endDateStr=moment.utc(event.resource.endDate).format('MMM DD, YYYY'); 
-            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nCheck-out: ${endDateStr}`;
+            const startDateStr=moment.utc(event.start).format('MMM DD, YYYY');
+            const inclusiveEndDate = new Date(event.resource.endDate); inclusiveEndDate.setUTCDate(inclusiveEndDate.getUTCDate() - 1);
+            const inclusiveEndDateStr = moment.utc(inclusiveEndDate).format('MMM DD, YYYY'); 
+            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nLast Night: ${inclusiveEndDateStr} (Check-out: ${moment.utc(event.resource.endDate).format('MMM DD, YYYY')})`;
           }}
           popup components={components}
-          formats={{agendaHeaderFormat:({start,end})=>`${moment(start).format('MMM DD')} – ${moment(end).format('MMM DD')}`,dayHeaderFormat:date=>moment(date).format('ddd MMM DD')}} 
+          formats={{agendaHeaderFormat:({start,end})=>`${moment(start).format('MMM DD')} – ${moment(moment(end).toDate()).subtract(1,'day').format('MMM DD')}`, dayHeaderFormat:date=>moment(date).format('ddd MMM DD')}} 
           longPressThreshold={250} messages={{showMore:total=>`+ ${total} more bookings`}} />
       )}
     </div>
