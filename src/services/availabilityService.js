@@ -18,6 +18,7 @@ const parseBookings = (bookingsJson) => {
       ...booking,
       startDate: normalizeDate(booking.startDate), 
       endDate: normalizeDate(booking.endDate), // endDate is exclusive check-out   
+      createdAt: booking.createdAt ? normalizeDate(new Date(booking.createdAt)) : null // Ensure createdAt is also a Date object or null
     }));
   } catch (error) {
     console.error('Error parsing bookings from localStorage:', error);
@@ -43,14 +44,15 @@ export const getAllBookings = () => {
   return [...confirmed, ...pencil].sort((a, b) => {
     const dateA = a.startDate ? a.startDate.getTime() : 0;
     const dateB = b.startDate ? b.startDate.getTime() : 0;
-    if (dateA === dateB) { // Optional: further sort by creation or title if start dates are same
-        return (new Date(a.createdAt || 0).getTime()) - (new Date(b.createdAt || 0).getTime());
+    if (dateA === dateB) {
+        const createdA = a.createdAt ? a.createdAt.getTime() : 0;
+        const createdB = b.createdAt ? b.createdAt.getTime() : 0;
+        return createdA - createdB;
     }
     return dateA - dateB;
   });
 };
 
-// Internal helper for checkAvailabilityForRange
 const getDailyBookedCountsForOccupiedPeriod = (bookingsList, periodStartInclusive, periodEndInclusive) => { 
   const dailyBooked = {};
   if (!periodStartInclusive || !periodEndInclusive || periodStartInclusive.getTime() > periodEndInclusive.getTime()) return dailyBooked;
@@ -145,24 +147,15 @@ export const saveBooking = (bookingData) => {
   const newBookingToStore = { 
       ...bookingData, 
       id: newBookingId, 
-      // Ensure createdAt is a Date object before conversion for storage, or use existing if it's already ISO
       createdAt: bookingData.createdAt instanceof Date ? bookingData.createdAt : (bookingData.createdAt ? new Date(bookingData.createdAt) : new Date())
   };
-  delete newBookingToStore.originalBookingStatus; // Remove if it exists
-
-  // Convert Date objects to ISO strings for storage immediately before stringifying
-  const bookingForStorage = {
-      ...newBookingToStore,
-      startDate: newBookingToStore.startDate.toISOString(),
-      endDate: newBookingToStore.endDate.toISOString(),
-      createdAt: newBookingToStore.createdAt.toISOString()
-  };
+  delete newBookingToStore.originalBookingStatus; 
 
   if (newBookingToStore.bookingStatus === 'confirmed') {
-    let bookings = getConfirmedBookings(); // Already parsed with Date objects
+    let bookings = getConfirmedBookings(); 
     const index = bookings.findIndex(b => b.id === newBookingToStore.id);
-    if (index > -1) bookings.splice(index, 1); // Remove old if updating
-    bookings.push(newBookingToStore); // Add new/updated with Date objects
+    if (index > -1) bookings.splice(index, 1); 
+    bookings.push(newBookingToStore); 
     localStorage.setItem(CONFIRMED_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
   } else if (newBookingToStore.bookingStatus === 'pencil') {
     let bookings = getPencilBookings();
@@ -171,7 +164,7 @@ export const saveBooking = (bookingData) => {
     bookings.push(newBookingToStore);
     localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
   } else throw new Error("Invalid booking status.");
-  return newBookingToStore; // Return with Date objects for immediate use
+  return newBookingToStore; 
 };
 
 export const getConsolidatedBookingsForDisplay = () => getAllBookings();
@@ -191,8 +184,13 @@ export const updateBooking = (bookingId, originalBookingStatus, updatedBookingDa
     const bookings = getPencilBookings().filter(b => b.id !== bookingId);
     localStorage.setItem(PENCIL_BOOKINGS_STORAGE_KEY, JSON.stringify(convertBookingsForStorage(bookings)));
   }
-  // Ensure createdAt from original booking is preserved if not explicitly changed
-  const bookingToSave = { ...updatedBookingData, id: bookingId, createdAt: updatedBookingData.createdAt || (getAllBookings().find(b=>b.id===bookingId)?.createdAt) || new Date() }; 
+  
+  let originalBooking = getAllBookings().find(b => b.id === bookingId);
+  const bookingToSave = { 
+      ...updatedBookingData, 
+      id: bookingId, 
+      createdAt: updatedBookingData.createdAt || originalBooking?.createdAt || new Date() 
+  }; 
   return saveBooking(bookingToSave); 
 };
 

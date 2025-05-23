@@ -5,7 +5,7 @@ import { TOTAL_ROOMS, PROGRAM_TYPES, OTHER_BOOKING_CATEGORIES } from '../constan
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
-const formatDateForDisplay = (utcDate, options = { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) => {
+const formatDateForDisplay = (utcDate, options = { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) => {
     if (!utcDate) return 'N/A';
     return new Date(utcDate).toLocaleDateString(undefined, options);
 };
@@ -31,7 +31,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     const [searchCriteria, setSearchCriteria] = useState({ 
         searchPeriodStart: initialSearchPeriodStartLocal, 
         searchPeriodEnd: initialSearchPeriodEndLocal,     
-        stayDuration: 1 // Number of Nights
+        stayDuration: 1 
     });
     const [availableSlots, setAvailableSlots] = useState([]); 
     const [selectedSlot, setSelectedSlot] = useState(null);   
@@ -66,14 +66,14 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 let newEnd = prev.searchPeriodEnd; 
                 if (newStart instanceof Date && newDuration > 0) {
                     const minCheckoutDate = new Date(newStart.getTime() + newDuration * 24 * 60 * 60 * 1000);
-                    if (!newEnd || newEnd.getTime() < minCheckoutDate.getTime()) { // Ensure newEnd is valid Date
+                    if (!newEnd || newEnd.getTime() < minCheckoutDate.getTime()) { 
                         newEnd = minCheckoutDate;
                     }
                 }
                 return { ...prev, 
                     searchPeriodStart: newStart, 
                     stayDuration: newDuration,
-                    searchPeriodEnd: newEnd || initialSearchPeriodEndLocal // Fallback if newEnd became invalid
+                    searchPeriodEnd: newEnd || initialSearchPeriodEndLocal 
                 };
             });
             setAvailableSlots([]); setSelectedSlot(null); setAvailabilityCheckResult(null); 
@@ -100,7 +100,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 if (value === "") newState[name] = ""; 
                 else {
                     const numValue = parseInt(value, 10);
-                    newState[name] = isNaN(numValue) ? prev.numberOfRooms : numValue; // Keep current if NaN during typing
+                    newState[name] = isNaN(numValue) ? prev.numberOfRooms : numValue; 
                 }
             } else {
                 newState[name] = value;
@@ -111,8 +111,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
 
         if (name === 'numberOfRooms') {
             const numValue = parseInt(value, 10);
-            const roomsToRecheck = isNaN(numValue) || numValue < 1 ? formData.numberOfRooms : Math.min(numValue, TOTAL_ROOMS); // Use current state if NaN for recheck
-            if (selectedSlot && roomsToRecheck >=1) { // Only recheck if roomsToRecheck is valid
+            const roomsToRecheck = isNaN(numValue) || numValue < 1 ? formData.numberOfRooms : Math.min(numValue, TOTAL_ROOMS); 
+            if (selectedSlot && roomsToRecheck >=1) { 
                  reCheckSelectedSlotAvailability(selectedSlot, roomsToRecheck);
             }
         }
@@ -123,7 +123,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         const numValue = parseInt(value, 10);
         const validatedRooms = isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, TOTAL_ROOMS);
         setFormData(prev => ({ ...prev, numberOfRooms: validatedRooms }));
-        if (selectedSlot) { // Re-check with final validated value
+        if (selectedSlot) { 
             reCheckSelectedSlotAvailability(selectedSlot, validatedRooms);
         }
     };
@@ -143,7 +143,9 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
 
             if ((name === 'searchPeriodStart' || name === 'stayDuration') && currentSearch.searchPeriodStart instanceof Date) {
                 const earliestCheckin = currentSearch.searchPeriodStart;
-                const duration = (name === 'stayDuration' && value === "") ? prev.stayDuration : parseInt(currentSearch.stayDuration, 10);
+                let duration = (name === 'stayDuration' && value === "") ? prev.stayDuration : parseInt(currentSearch.stayDuration.toString(), 10);
+                if (isNaN(duration)) duration = 1;
+
 
                 if (earliestCheckin && typeof duration === 'number' && duration > 0) {
                     const minCheckoutDate = new Date(earliestCheckin.getTime() + duration * 24 * 60 * 60 * 1000);
@@ -175,13 +177,13 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     };
 
     const handleFindAvailableSlots = async () => {
-        const numRoomsFinal = parseInt(formData.numberOfRooms,10);
+        const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
             addToast(`Please enter a valid number of rooms (1-${TOTAL_ROOMS}).`, 'error');
             setFormData(prev => ({...prev, numberOfRooms: 1})); 
             return;
         }
-        const durationNightsFinal = parseInt(searchCriteria.stayDuration,10);
+        const durationNightsFinal = parseInt(searchCriteria.stayDuration.toString(),10);
         if (isNaN(durationNightsFinal) || durationNightsFinal < 1) {
             addToast('Please enter a valid number of nights (at least 1).', 'error');
             setSearchCriteria(prev => ({...prev, stayDuration: 1})); 
@@ -225,8 +227,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             return;
         }
         setSelectedSlot(slotWithExclusiveEndDate);
-        // Use final validated number of rooms for re-check
-        const numRoomsFinal = parseInt(formData.numberOfRooms,10) || 1;
+        const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10) || 1;
         reCheckSelectedSlotAvailability(slotWithExclusiveEndDate, numRoomsFinal);
     };
 
@@ -235,7 +236,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         if (!formData.programType) { addToast('Program type is required.', 'error'); return false; }
         if (formData.programType === 'OTHER_BOOKINGS' && !formData.otherBookingCategory) { addToast('Category for "Other Bookings" is required.', 'error'); return false; }
         
-        const numRoomsFinal = parseInt(formData.numberOfRooms,10);
+        const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
             addToast(`Number of rooms must be between 1 and ${TOTAL_ROOMS}.`, 'error'); return false;
         }
@@ -247,19 +248,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     };
     const handleBookRooms = async () => {
         if (!validateBookingForm()) return; 
-        
-        // Ensure final validated numbers are used for payload
-        const finalNumberOfRooms = parseInt(formData.numberOfRooms, 10) || 1;
-        const finalStayDuration = parseInt(searchCriteria.stayDuration, 10) || 1;
-
-        // Double check selectedSlot just before booking
-        if (!selectedSlot || !selectedSlot.startDate || !selectedSlot.endDate) {
-            addToast("Selected slot data is missing. Please re-select a slot.", "error");
-            return;
-        }
-        // Recalculate expected endDate for the slot based on current stayDuration if critical
-        // For now, assume selectedSlot.endDate is correct from slot selection.
-
+        const finalNumberOfRooms = parseInt(formData.numberOfRooms.toString(), 10) || 1;
         setIsBooking(true);
         try {
             const bookingPayload = {
@@ -296,7 +285,9 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                         <DatePicker selected={searchCriteria.searchPeriodStart} 
                             onChange={date => handleSearchCriteriaChange('searchPeriodStart', date)}
                             selectsStart startDate={searchCriteria.searchPeriodStart} endDate={searchCriteria.searchPeriodEnd}
-                            minDate={getInitialLocalDate()} className="form-input" dateFormat="MMMM d, yyyy" popperPlacement="bottom-start" />
+                            minDate={getInitialLocalDate()} className="form-input" 
+                            dateFormat="EEE, MMM d, yyyy" 
+                            popperPlacement="bottom-start" />
                         </div>
                     </div>
                     <div> 
@@ -305,10 +296,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                         <DatePicker selected={searchCriteria.searchPeriodEnd} 
                             onChange={date => handleSearchCriteriaChange('searchPeriodEnd', date)}
                             selectsEnd startDate={searchCriteria.searchPeriodStart} endDate={searchCriteria.searchPeriodEnd}
-                            minDate={searchCriteria.searchPeriodStart && typeof searchCriteria.stayDuration === 'number' && searchCriteria.stayDuration > 0 ? 
+                            minDate={searchCriteria.searchPeriodStart && typeof parseInt(searchCriteria.stayDuration.toString(),10) === 'number' && parseInt(searchCriteria.stayDuration.toString(),10) > 0 ? 
                                 new Date(new Date(searchCriteria.searchPeriodStart).getTime() + (parseInt(searchCriteria.stayDuration.toString(),10) * 24 * 60 * 60 * 1000)) : 
                                 getInitialLocalDate(1)}
-                            className="form-input" dateFormat="MMMM d, yyyy" popperPlacement="bottom-start" />
+                            className="form-input" 
+                            dateFormat="EEE, MMM d, yyyy" 
+                            popperPlacement="bottom-start" />
                         </div>
                     </div>
                 </div>
@@ -317,7 +310,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                         <div className="form-group">
                             <label className="form-label">Number of Nights</label>
                             <input 
-                                type="text" // Changed to text to allow empty string during typing
+                                type="text" 
                                 name="stayDuration" 
                                 value={searchCriteria.stayDuration} 
                                 onChange={(e) => handleSearchCriteriaChange('stayDuration', e.target.value)}
@@ -331,7 +324,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                         <div className="form-group">
                             <label className="form-label">Number of Rooms</label>
                             <input 
-                                type="text" // Changed to text
+                                type="text" 
                                 name="numberOfRooms" 
                                 value={formData.numberOfRooms} 
                                 onChange={handleFormInputChange}
@@ -408,7 +401,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                     <div className="form-group"><label className="form-label">Program Title</label><input type="text" name="programTitle" value={formData.programTitle} onChange={handleFormInputChange} className="form-input" placeholder="Program title"/></div>
                     <div className="grid grid-halves">
                         <div><div className="form-group"><label className="form-label">Program Type</label><select name="programType" value={formData.programType} onChange={handleFormInputChange} className="form-select"><option value="">Select Type</option>{PROGRAM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div></div>
-                        {formData.programType === 'OTHER_BOOKINGS' && (<div><div className="form-group"><label className="form-label">Category for Other</label><select name="otherBookingCategory" value={formData.otherBookingCategory} onChange={handleFormInputChange} className="form-select">{OTHER_BOOKING_CATEGORIES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div></div>)}
+                        {formData.programType === 'OTHER_BOOKINGS' && (<div><div className="form-group"><label className="form-label">Category for Other</label><select name="otherBookingCategory" value={formData.otherBookingCategory} onChange={handleFormInputChange} className="form-select"><option value="">Select Category</option>{OTHER_BOOKING_CATEGORIES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div></div>)}
                     </div>
                     <div className="form-group"><label className="form-label">Booking Type</label><div className="radio-group">
                         <label className="radio-label"><input type="radio" name="bookingStatus" value="pencil" checked={formData.bookingStatus === 'pencil'} onChange={handleFormInputChange}/> Pencil</label>

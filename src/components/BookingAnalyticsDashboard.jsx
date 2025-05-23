@@ -13,7 +13,7 @@ const convertLocalToUTCDate = (localDate) => {
     if (!localDate) return null;
     return new Date(Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()));
 };
-const formatDateForDisplay = (utcDate, options = { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' }) => {
+const formatDateForDisplay = (utcDate, options = { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) => {
     if (!utcDate) return 'N/A';
     return new Date(utcDate).toLocaleDateString(undefined, options);
 };
@@ -70,7 +70,7 @@ const BookingAnalyticsDashboard = ({ addToast }) => {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const renderSingleDayView = () => (
-        singleDayStats && (
+        singleDayStats && singleDayStats.date && ( // Added check for singleDayStats.date
             <>
                 <h3 className="analytics-subtitle">Occupancy for {formatDateForDisplay(singleDayStats.date)}</h3>
                 <div className="stats-summary-text">
@@ -152,7 +152,7 @@ const BookingAnalyticsDashboard = ({ addToast }) => {
     const renderProgramTypeDistribution = () => (
         programTypeBreakdown.length > 0 && (
             <>
-                <h3 className="analytics-subtitle">Program Type Distribution ({ viewMode === 'singleDay' ? `for ${formatDateForDisplay(convertLocalToUTCDate(selectedSingleDay))}` : viewMode === 'specificMonth' ? `for ${MONTH_NAMES[selectedMonth]} ${selectedYear}` : `for ${selectedYear}` })</h3>
+                <h3 className="analytics-subtitle">Program Type Distribution ({ viewMode === 'singleDay' && selectedSingleDay ? `for ${formatDateForDisplay(convertLocalToUTCDate(selectedSingleDay))}` : viewMode === 'specificMonth' ? `for ${MONTH_NAMES[selectedMonth]} ${selectedYear}` : `for ${selectedYear}` })</h3>
                 <ResponsiveContainer width="100%" height={350}>
                     <PieChart>
                         <Pie data={programTypeBreakdown} dataKey="Total" nameKey="name" cx="50%" cy="50%" outerRadius={120} 
@@ -172,7 +172,7 @@ const BookingAnalyticsDashboard = ({ addToast }) => {
             <h2 className="form-section-title">Booking Analytics</h2>
             <div className="analytics-controls">
                 <div className="control-group"><label>View:</label><select value={viewMode} onChange={(e) => setViewMode(e.target.value)} className="form-select-sm"><option value="singleDay">Single Day</option><option value="specificMonth">Month</option><option value="specificYear">Year</option></select></div>
-                {viewMode === 'singleDay' && (<div className="control-group"><label>Date:</label><DatePicker selected={selectedSingleDay} onChange={date => setSelectedSingleDay(date || new Date())} className="form-input-sm" dateFormat="MMM d, yyyy"/></div>)}
+                {viewMode === 'singleDay' && (<div className="control-group"><label>Date:</label><DatePicker selected={selectedSingleDay} onChange={date => setSelectedSingleDay(date || new Date())} className="form-input-sm" dateFormat="EEE, MMM d, yyyy"/></div>)}
                 {(viewMode === 'specificMonth' || viewMode === 'specificYear') && (<div className="control-group"><label>Year:</label><select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="form-select-sm">{YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}</select></div>)}
                 {viewMode === 'specificMonth' && (<div className="control-group"><label>Month:</label><select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="form-select-sm">{MONTH_NAMES.map((name, index) => <option key={index} value={index}>{name}</option>)}</select></div>)}
             </div>

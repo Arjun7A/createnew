@@ -41,7 +41,6 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
     try {
       const displayBookings = getConsolidatedBookingsForDisplay(); 
       const events = displayBookings.map(booking => {
-        // booking.endDate is EXCLUSIVE check-out day, which is what RBC expects for 'end' of allDay events
         return {
             id: booking.id,
             title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms) - ${booking.bookingStatus}`,
@@ -87,7 +86,22 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
     }
   };
   const CustomToolbar = useCallback((toolbar) => { 
-    const goToBack=()=>toolbar.onNavigate('PREV'),goToNext=()=>toolbar.onNavigate('NEXT'),goToCurrent=()=>toolbar.onNavigate('TODAY',new Date()),label=()=>toolbar.label;
+    const goToBack=()=>toolbar.onNavigate('PREV'),goToNext=()=>toolbar.onNavigate('NEXT'),goToCurrent=()=>toolbar.onNavigate('TODAY',new Date());
+    const label = () => {
+        const date = moment(toolbar.date);
+        if (toolbar.view === Views.MONTH) return date.format('MMMM YYYY');
+        if (toolbar.view === Views.WEEK) {
+            const firstDayOfWeek = date.clone().startOf('week');
+            const lastDayOfWeek = date.clone().endOf('week');
+            if (firstDayOfWeek.month() === lastDayOfWeek.month()) {
+                return `${firstDayOfWeek.format('MMM D')} – ${lastDayOfWeek.format('D, YYYY')}`;
+            }
+            return `${firstDayOfWeek.format('MMM D')} – ${lastDayOfWeek.format('MMM D, YYYY')}`;
+        }
+        if (toolbar.view === Views.DAY) return date.format('dddd, MMM D, YYYY');
+        if (toolbar.view === Views.AGENDA) return date.format('dddd, MMM D, YYYY') + ' (Agenda)'; // Or a range for agenda
+        return date.format('MMMM YYYY'); // Default
+    };
     return (<div className="rbc-toolbar elegant-toolbar"><div className="rbc-btn-group"><button type="button" onClick={goToCurrent} className="btn btn-outline">Today</button><button type="button" onClick={goToBack} className="btn btn-outline">‹</button><button type="button" onClick={goToNext} className="btn btn-outline">›</button></div><span className="rbc-toolbar-label">{label()}</span><div className="rbc-btn-group">{[{view:Views.MONTH,label:'Month'},{view:Views.WEEK,label:'Week'},{view:Views.DAY,label:'Day'},{view:Views.AGENDA,label:'Agenda'}].map(item=>(<button key={item.view} type="button" className={`btn btn-outline ${toolbar.view===item.view?'rbc-active':''}`} onClick={()=>toolbar.onView(item.view)}>{item.label}</button>))}</div></div>);
   }, []); 
   const components = useMemo(() => ({ toolbar: CustomToolbar }), [CustomToolbar]);
@@ -104,13 +118,20 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
           view={view} onView={handleViewChange} date={currentCalDate} onNavigate={handleNavigate} 
           selectable onSelectSlot={handleSelectSlot}
           tooltipAccessor={(event) => {
-            const startDateStr=moment.utc(event.start).format('MMM DD, YYYY');
+            const startDateStr=moment.utc(event.start).format('ddd, MMM DD, YYYY');
             const inclusiveEndDate = new Date(event.resource.endDate); inclusiveEndDate.setUTCDate(inclusiveEndDate.getUTCDate() - 1);
-            const inclusiveEndDateStr = moment.utc(inclusiveEndDate).format('MMM DD, YYYY'); 
-            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nLast Night: ${inclusiveEndDateStr} (Check-out: ${moment.utc(event.resource.endDate).format('MMM DD, YYYY')})`;
+            const inclusiveEndDateStr = moment.utc(inclusiveEndDate).format('ddd, MMM DD, YYYY'); 
+            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nLast Night: ${inclusiveEndDateStr} (Check-out: ${moment.utc(event.resource.endDate).format('ddd, MMM DD, YYYY')})`;
           }}
           popup components={components}
-          formats={{agendaHeaderFormat:({start,end})=>`${moment(start).format('MMM DD')} – ${moment(moment(end).toDate()).subtract(1,'day').format('MMM DD')}`, dayHeaderFormat:date=>moment(date).format('ddd MMM DD')}} 
+          formats={{
+              monthHeaderFormat: date => moment(date).format('MMMM YYYY'),
+              weekdayFormat: (date, culture, local) => local.format(date, 'ddd', culture), // Short day in month cells
+              dayHeaderFormat: date => moment(date).format('dddd, MMM D'), // Day view header
+              agendaHeaderFormat:({start,end})=>`${moment(start).format('ddd, MMM DD')} – ${moment(moment(end).toDate()).subtract(1,'day').format('ddd, MMM DD')}`,
+              dayRangeHeaderFormat: ({ start, end }, culture, local) => 
+                local.format(start, 'ddd, MMM D', culture) + ' – ' + local.format(end, 'ddd, MMM D', culture),
+          }} 
           longPressThreshold={250} messages={{showMore:total=>`+ ${total} more bookings`}} />
       )}
     </div>
