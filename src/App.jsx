@@ -4,6 +4,7 @@ import BookingForm from './components/BookingForm';
 import AvailabilitySummary from './components/AvailabilitySummary';
 import AvailabilityCalendar from './components/AvailabilityCalendar';
 import AdminBookingManager from './components/AdminBookingManager';
+import BookingAnalyticsDashboard from './components/BookingAnalyticsDashboard';
 import Toast from './components/Toast';
 import './styles/main.css';
 
@@ -17,6 +18,7 @@ function App() {
     endDate: null,
   });
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const addToast = (message, type) => {
     toastIdCounter.current += 1;
@@ -31,7 +33,6 @@ function App() {
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
-  // selection.startDate & selection.endDate from AvailabilityCalendar are local Date objects
   const handleDateSelectFromCalendar = useCallback((selection) => {
     setSelectedDatesForForm({
       startDate: selection.startDate, 
@@ -39,32 +40,79 @@ function App() {
     });
   }, []);
 
-  const toggleAdminPanel = () => { setShowAdmin(prev => !prev); };
+  const toggleAdminPanel = () => {
+    setShowAdmin(prev => !prev);
+    if (!showAdmin && showAnalytics) setShowAnalytics(false); 
+  };
+
+  const toggleAnalyticsDashboard = () => {
+    setShowAnalytics(prev => !prev);
+    if (!showAnalytics && showAdmin) setShowAdmin(false); 
+  };
 
   return (
     <div className="container app-container">
       <header className="app-header elegant-header">
         <h1 className="app-title">IIMC MDC Room Booking Portal</h1>
         <p className="app-subtitle">Efficiently manage and book rooms for various programs with real-time availability.</p>
-        <button onClick={toggleAdminPanel} className="btn admin-toggle-btn stylish-toggle">
-          {showAdmin ? "Hide Admin Panel" : "Access Admin Dashboard"}
-        </button>
+        <div className="header-buttons-group">
+            <button
+            onClick={toggleAnalyticsDashboard}
+            className="btn admin-toggle-btn stylish-toggle stylish-toggle-alt"
+            >
+            {showAnalytics ? "Hide Analytics" : "Show Analytics"}
+            </button>
+            <button 
+            onClick={toggleAdminPanel} 
+            className="btn admin-toggle-btn stylish-toggle"
+            >
+            {showAdmin ? "Hide Admin Panel" : "Access Admin Dashboard"}
+            </button>
+        </div>
       </header>
 
-      {showAdmin && ( <section className="admin-section card-lifted"><AdminBookingManager addToast={addToast} onBookingChanged={handleBookingChanged}/></section> )}
-      <main className="main-content">
-        <div className="layout-grid">
-          <section className="booking-form-section card-lifted">
-            <BookingForm addToast={addToast} onBookingAdded={handleBookingChanged} selectedDates={selectedDatesForForm} />
-          </section>
-          <aside className="summary-section card-lifted">
-            <AvailabilitySummary refreshTrigger={refreshTrigger} />
-          </aside>
-        </div>
-        <section className="calendar-section-wrapper card-lifted">
-          <AvailabilityCalendar refreshTrigger={refreshTrigger} onDateSelect={handleDateSelectFromCalendar} />
+      {showAdmin && (
+        <section className="admin-section card-lifted">
+          <AdminBookingManager 
+            addToast={addToast} 
+            onBookingChanged={handleBookingChanged}
+          />
         </section>
-      </main>
+      )}
+
+      {showAnalytics && ( 
+        <section className="analytics-section card-lifted">
+          <BookingAnalyticsDashboard addToast={addToast} />
+        </section>
+      )}
+      
+      {!showAdmin && !showAnalytics && (
+        <main className="main-content">
+            <div className="layout-grid">
+                <section className="booking-form-section card-lifted">
+                <BookingForm 
+                    addToast={addToast} 
+                    onBookingAdded={handleBookingChanged}
+                    selectedDates={selectedDatesForForm} 
+                />
+                </section>
+                
+                <aside className="summary-section card-lifted">
+                <AvailabilitySummary 
+                    refreshTrigger={refreshTrigger}
+                />
+                </aside>
+            </div>
+            
+            <section className="calendar-section-wrapper card-lifted">
+                <AvailabilityCalendar 
+                refreshTrigger={refreshTrigger}
+                onDateSelect={handleDateSelectFromCalendar} 
+                />
+            </section>
+        </main>
+      )}
+      
       <div className="toast-container">{toasts.map(toast => <Toast key={toast.id.toString()} message={toast.message} type={toast.type} />)}</div>
       <footer className="app-footer"><p>&copy; {new Date().getFullYear()} IIMC MDC Room Booking System. All rights reserved.</p></footer>
     </div>
