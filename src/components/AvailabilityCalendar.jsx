@@ -4,7 +4,7 @@ import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { getConsolidatedBookingsForDisplay } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants'; // <-- CORRECTED: Removed OTHER_BOOKING_CATEGORIES
+import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
 
 const localizer = momentLocalizer(moment); 
 
@@ -13,7 +13,7 @@ const PROGRAM_TYPE_BASE_COLORS = {
   CUSTOM_LDP: '#50E3C2', 
   OPEN_MDP: '#F5A623', 
   CTP: '#9013FE', 
-  INSTITUTIONAL_BOOKINGS: '#3498DB', // Added color for new type
+  INSTITUTIONAL_BOOKINGS: '#3498DB',
   OTHER_BOOKINGS: '#7F8C8D', 
   DEFAULT: '#34495E'
 };
@@ -26,7 +26,6 @@ const getTextColorForBackground = (hexColor) => {
     } catch(e) { return '#FFFFFF'; }
 };
 
-// CORRECTED: This function no longer uses OTHER_BOOKING_CATEGORIES
 const getDisplayProgramTypeForCalendar = (booking) => { 
     const mainTypeObj = PROGRAM_TYPES.find(pt => pt.value === booking.programType);
     let displayType = mainTypeObj ? mainTypeObj.label : (booking.programType || 'N/A');
@@ -45,22 +44,29 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
   const [view, setView] = useState(Views.MONTH);
   const [currentCalDate, setCurrentCalDate] = useState(new Date()); 
 
-  const fetchAndSetCalendarEvents = useCallback(() => {
+  const fetchAndSetCalendarEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const displayBookings = getConsolidatedBookingsForDisplay(); 
-      const events = displayBookings.map(booking => {
-        return {
-            id: booking.id,
-            title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms) - ${booking.bookingStatus}`,
-            start: booking.startDate,       
-            end: booking.endDate,     
-            allDay: true, 
-            resource: booking 
-        };
-      });
-      setCalendarEvents(events);
-    } catch (error) { console.error('Error fetching calendar bookings:', error); }
+      const displayBookings = await getConsolidatedBookingsForDisplay(); 
+      if (Array.isArray(displayBookings)) {
+        const events = displayBookings.map(booking => {
+          return {
+              id: booking.id,
+              title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms) - ${booking.bookingStatus}`,
+              start: new Date(booking.startDate),       
+              end: new Date(booking.endDate),     
+              allDay: true, 
+              resource: booking 
+          };
+        });
+        setCalendarEvents(events);
+      } else {
+        setCalendarEvents([]);
+      }
+    } catch (error) { 
+      console.error('Error fetching calendar bookings:', error); 
+      setCalendarEvents([]);
+    }
     finally { setLoading(false); }
   }, []);
 

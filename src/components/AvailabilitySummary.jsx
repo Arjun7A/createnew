@@ -27,26 +27,36 @@ const AvailabilitySummary = ({ refreshTrigger }) => {
   });
   const [loadingSummary, setLoadingSummary] = useState(false);
 
-  const updateSummaryForDay = useCallback(() => {
-    if (!selectedLocalDate) return; setLoadingSummary(true);
+  const updateSummaryForDay = useCallback(async () => {
+    if (!selectedLocalDate) return; 
+    setLoadingSummary(true);
     const selectedUTCDay = convertLocalToUTCDate(selectedLocalDate); 
     if (!selectedUTCDay) { setLoadingSummary(false); return; } 
 
-    const allBookings = getAllBookings(); 
-    let roomsBookedOnSelectedDay = 0;
-    allBookings.forEach(booking => {
-      if (booking.startDate && booking.endDate && 
-          selectedUTCDay.getTime() >= booking.startDate.getTime() && 
-          selectedUTCDay.getTime() <= booking.endDate.getTime()) {
-        roomsBookedOnSelectedDay += booking.numberOfRooms;
-      }
-    });
-    const availableRoomsOnDay = TOTAL_ROOMS - roomsBookedOnSelectedDay;
-    setSummaryData({
-      totalRooms: TOTAL_ROOMS, bookedForDay: roomsBookedOnSelectedDay, availableForDay: availableRoomsOnDay,
-      dateChecked: formatDateForDisplay(selectedUTCDay) 
-    });
-    setLoadingSummary(false);
+    try {
+        const allBookings = await getAllBookings(); 
+        if (Array.isArray(allBookings)) {
+            let roomsBookedOnSelectedDay = 0;
+            allBookings.forEach(booking => {
+              const startDate = new Date(booking.startDate);
+              const endDate = new Date(booking.endDate);
+              if (startDate && endDate && 
+                  selectedUTCDay.getTime() >= startDate.getTime() && 
+                  selectedUTCDay.getTime() < endDate.getTime()) {
+                roomsBookedOnSelectedDay += booking.numberOfRooms;
+              }
+            });
+            const availableRoomsOnDay = TOTAL_ROOMS - roomsBookedOnSelectedDay;
+            setSummaryData({
+              totalRooms: TOTAL_ROOMS, bookedForDay: roomsBookedOnSelectedDay, availableForDay: availableRoomsOnDay,
+              dateChecked: formatDateForDisplay(selectedUTCDay) 
+            });
+        }
+    } catch(error) {
+        console.error("Error updating summary:", error);
+    } finally {
+        setLoadingSummary(false);
+    }
   }, [selectedLocalDate]); 
 
   useEffect(() => { updateSummaryForDay(); }, [selectedLocalDate, refreshTrigger, updateSummaryForDay]);

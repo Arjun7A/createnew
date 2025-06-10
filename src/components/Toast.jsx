@@ -1,4 +1,3 @@
-
 // src/components/Toast.jsx
 import React from 'react';
 

@@ -7,18 +7,8 @@ import "react-datepicker/dist/react-datepicker.css";
 
 const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const getInitialLocalDate = (offset = 0) => {const d=new Date(); d.setDate(d.getDate() + offset); d.setHours(0,0,0,0); return d;};
-    const initialEditFormState = { 
-        id: null, 
-        originalBookingStatus: '', 
-        programTitle: '', 
-        programType: '', 
-        otherBookingCategory: '', 
-        institutionalBookingDetails: '', 
-        numberOfRooms: 1, 
-        bookingStatus: 'pencil', 
-        startDate: getInitialLocalDate(), 
-        endDate: getInitialLocalDate(1) 
-    };
+    const initialEditFormState = { id: null, originalBookingStatus: '', programTitle: '', programType: '', otherBookingCategory: '', institutionalBookingDetails: '', numberOfRooms: 1, bookingStatus: 'pencil', startDate: getInitialLocalDate(), endDate: getInitialLocalDate(1) };
+    
     const [editForm, setEditForm] = useState(initialEditFormState);
     const [bookings, setBookings] = useState([]);
     const [selectedBookingForEdit, setSelectedBookingForEdit] = useState(null);
@@ -27,7 +17,8 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
 
     const convertUTCDatetoLocalDateForPicker = (utcDate) => {
         if (!utcDate) return getInitialLocalDate();
-        return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
+        const d = new Date(utcDate);
+        return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     };
     const convertLocalPickerDateToUTCMidnight = (localDate) => {
         if (!localDate) return null;
@@ -45,19 +36,23 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     };
     const formatExclusiveCheckoutDateForDisplay = (exclusiveCheckoutDate) => formatDateForDisplay(exclusiveCheckoutDate);
 
-    const fetchBookings = useCallback(() => { 
+    const fetchBookings = useCallback(async () => { 
         setLoading(true);
-        try { setBookings(getConsolidatedBookingsForDisplay()); } 
+        try { 
+            const data = await getConsolidatedBookingsForDisplay();
+            setBookings(data); 
+        } 
         catch (error) { console.error('Error fetching bookings:', error); addToast('Error loading bookings', 'error'); }
         finally { setLoading(false); }
     }, [addToast]);
 
     useEffect(() => { fetchBookings(); }, [fetchBookings, onBookingChanged]);
 
-    const handleDeleteBooking = (bookingId, bookingStatus) => { 
-        if (!window.confirm(`Delete this ${bookingStatus || ''} booking? This action cannot be undone.`)) return; setLoading(true);
+    const handleDeleteBooking = async (bookingId, bookingStatus) => { 
+        if (!window.confirm(`Delete this ${bookingStatus || ''} booking? This action cannot be undone.`)) return; 
+        setLoading(true);
         try { 
-            deleteBooking(bookingId, bookingStatus); 
+            await deleteBooking(bookingId); 
             addToast('Booking deleted!', 'success'); 
             fetchBookings(); 
             if (onBookingChanged) onBookingChanged(); 
@@ -78,7 +73,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             numberOfRooms: booking.numberOfRooms,
             bookingStatus: booking.bookingStatus, 
             startDate: convertUTCDatetoLocalDateForPicker(booking.startDate),
-            endDate: convertUTCDatetoLocalDateForPicker(booking.endDate), 
+            endDate: convertUTCDatetoLocalDateForPicker(new Date(booking.endDate)), 
         });
         setIsEditing(true);
     };
@@ -149,7 +144,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
         return true;
     };
 
-    const handleSaveEdit = () => {
+    const handleSaveEdit = async () => {
         if (!selectedBookingForEdit || !validateEditForm()) return; 
         const finalNumberOfRooms = parseInt(editForm.numberOfRooms.toString(), 10) || 1; 
         setLoading(true);
@@ -167,7 +162,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                 endDate: serviceEndDateExclusiveUTC,    
                 createdAt: selectedBookingForEdit.createdAt || new Date() 
             };
-            updateBooking(selectedBookingForEdit.id, selectedBookingForEdit.originalBookingStatus, bookingPayloadForUpdate);
+            await updateBooking(selectedBookingForEdit.id, selectedBookingForEdit.originalBookingStatus, bookingPayloadForUpdate);
             addToast('Booking updated!', 'success'); 
             fetchBookings(); 
             setIsEditing(false); 

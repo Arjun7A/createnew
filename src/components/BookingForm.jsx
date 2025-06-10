@@ -89,12 +89,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDates]);
 
-    const reCheckSelectedSlotAvailability = useCallback((slotToCheck, rooms) => {
+    const reCheckSelectedSlotAvailability = useCallback(async (slotToCheck, rooms) => {
         if (!slotToCheck || !slotToCheck.startDate || !slotToCheck.endDate || rooms < 1) { 
             setAvailabilityCheckResult(null); return; 
         }
         try {
-            const result = checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms);
+            const result = await checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms);
             setAvailabilityCheckResult(result);
         } catch (error) { addToast(`Error re-checking: ${error.message}`, 'error'); setAvailabilityCheckResult(null); }
     }, [addToast]);
@@ -187,7 +187,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         });
     };
 
-    const handleFindAvailableSlots = () => {
+    const handleFindAvailableSlots = async () => {
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
             addToast(`Please enter a valid number of rooms (1-${TOTAL_ROOMS}).`, 'error');
@@ -217,14 +217,14 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         setIsFindingSlots(true); setSelectedSlot(null); setAvailabilityCheckResult(null); setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
         
         try {
-            const slots = findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
+            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
             setAvailableSlots(slots); 
             if (slots.length === 0) addToast('No available slots found.', 'warning');
             else addToast(`Found ${slots.length} potential ${durationNightsFinal}-night stay(s).`, 'success');
 
             const displayPeriodEndForOverlap = new Date(latestCheckOutByUTC);
             displayPeriodEndForOverlap.setUTCDate(displayPeriodEndForOverlap.getUTCDate() - 1); 
-            const overlappingBookings = getBookingsInPeriod(earliestCheckInUTC, displayPeriodEndForOverlap);
+            const overlappingBookings = await getBookingsInPeriod(earliestCheckInUTC, displayPeriodEndForOverlap);
             setBookingsInSearchPeriod(overlappingBookings);
             if (overlappingBookings.length > 0) setShowPeriodBookingsDetails(true); 
         } catch (error) { addToast(`Error during search: ${error.message}`, 'error'); }
@@ -259,7 +259,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         return true;
     };
 
-    const handleBookRooms = () => {
+    const handleBookRooms = async () => {
         if (!validateBookingForm()) return; 
         const finalNumberOfRooms = parseInt(formData.numberOfRooms.toString(), 10) || 1;
         setIsBooking(true);
@@ -274,7 +274,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 startDate: selectedSlot.startDate, 
                 endDate: selectedSlot.endDate, 
             };
-            saveBooking(bookingPayload);
+            await saveBooking(bookingPayload);
             addToast('Booking successful!', 'success'); 
             if (onBookingAdded) onBookingAdded(); 
             resetForm();
@@ -379,14 +379,14 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                     </h3>
                     <div className="existing-bookings-list elegant-scrollable-list">
                         {bookingsInSearchPeriod.map(booking => (
-                            <div key={booking.id} className={`period-booking-item-elegant status-${booking.bookingStatus?.toLowerCase()}`}>
+                            <div key={booking.id} className={`period-booking-item-elegant status-${booking.status?.toLowerCase()}`}>
                                 <div className="booking-item-main-info">
-                                    <span className="booking-item-title">{booking.programTitle}</span>
-                                    <span className="booking-item-rooms">({booking.numberOfRooms} {booking.numberOfRooms === 1 ? 'room' : 'rooms'})</span>
+                                    <span className="booking-item-title">{booking.program_title}</span>
+                                    <span className="booking-item-rooms">({booking.number_of_rooms} {booking.number_of_rooms === 1 ? 'room' : 'rooms'})</span>
                                 </div>
                                 <div className="booking-item-sub-info">
-                                    <span>{formatDateForDisplay(booking.startDate)} to {formatInclusiveLastDayForDisplay(booking.endDate)}</span>
-                                    <span className={`booking-item-status-chip status-chip-${booking.bookingStatus?.toLowerCase()}`}>{booking.bookingStatus}</span>
+                                    <span>{formatDateForDisplay(new Date(booking.start_date))} to {formatInclusiveLastDayForDisplay(new Date(booking.end_date))}</span>
+                                    <span className={`booking-item-status-chip status-chip-${booking.status?.toLowerCase()}`}>{booking.status}</span>
                                 </div>
                             </div>
                         ))}
