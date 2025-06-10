@@ -4,14 +4,20 @@ import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { getConsolidatedBookingsForDisplay } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES, OTHER_BOOKING_CATEGORIES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants'; // <-- CORRECTED: Removed OTHER_BOOKING_CATEGORIES
 
 const localizer = momentLocalizer(moment); 
 
 const PROGRAM_TYPE_BASE_COLORS = {
-  OPEN_LDP: '#4A90E2', CUSTOM_LDP: '#50E3C2', OPEN_MDP: '#F5A623', 
-  CTP: '#9013FE', OTHER_BOOKINGS: '#7F8C8D', DEFAULT: '#34495E'
+  OPEN_LDP: '#4A90E2', 
+  CUSTOM_LDP: '#50E3C2', 
+  OPEN_MDP: '#F5A623', 
+  CTP: '#9013FE', 
+  INSTITUTIONAL_BOOKINGS: '#3498DB', // Added color for new type
+  OTHER_BOOKINGS: '#7F8C8D', 
+  DEFAULT: '#34495E'
 };
+
 const getTextColorForBackground = (hexColor) => {
     if (!hexColor || hexColor.length < 7) return '#FFFFFF';
     try {
@@ -19,13 +25,16 @@ const getTextColorForBackground = (hexColor) => {
         return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#2c3e50' : '#FFFFFF';
     } catch(e) { return '#FFFFFF'; }
 };
+
+// CORRECTED: This function no longer uses OTHER_BOOKING_CATEGORIES
 const getDisplayProgramTypeForCalendar = (booking) => { 
     const mainTypeObj = PROGRAM_TYPES.find(pt => pt.value === booking.programType);
     let displayType = mainTypeObj ? mainTypeObj.label : (booking.programType || 'N/A');
+
     if (booking.programType === 'OTHER_BOOKINGS' && booking.otherBookingCategory) {
-      const categoryObj = OTHER_BOOKING_CATEGORIES.find(cat => cat.value === booking.otherBookingCategory);
-      if (categoryObj && categoryObj.label && categoryObj.value) { displayType = `${mainTypeObj.label}: ${categoryObj.label}`; }
-      else if (booking.otherBookingCategory) { displayType = `${mainTypeObj.label}: ${booking.otherBookingCategory}`; }
+      displayType = `${mainTypeObj.label}: ${booking.otherBookingCategory}`;
+    } else if (booking.programType === 'INSTITUTIONAL_BOOKINGS' && booking.institutionalBookingDetails) {
+      displayType = `${mainTypeObj.label}: ${booking.institutionalBookingDetails}`;
     }
     return displayType;
 };
@@ -68,9 +77,10 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
     }
     return { style: { backgroundColor, borderRadius: 'var(--radius-sm)', opacity, color: textColor, border, boxShadow, padding: '3px 5px', fontSize: '0.78em', lineHeight: '1.3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }};
   };
-  
+
   const handleNavigate = (newDate) => { setCurrentCalDate(newDate); }; 
   const handleViewChange = (newView) => { setView(newView); };
+
   const handleSelectSlot = ({ start, end, action, slots }) => { 
     if (onDateSelect) {
       let actualEndDateLocal = new Date(end); 
@@ -85,6 +95,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
       onDateSelect({ startDate: normStartLocal, endDate: normEndLocal, action: action });
     }
   };
+
   const CustomToolbar = useCallback((toolbar) => { 
     const goToBack=()=>toolbar.onNavigate('PREV'),goToNext=()=>toolbar.onNavigate('NEXT'),goToCurrent=()=>toolbar.onNavigate('TODAY',new Date());
     const label = () => {
@@ -99,11 +110,12 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
             return `${firstDayOfWeek.format('MMM D')} – ${lastDayOfWeek.format('MMM D, YYYY')}`;
         }
         if (toolbar.view === Views.DAY) return date.format('dddd, MMM D, YYYY');
-        if (toolbar.view === Views.AGENDA) return date.format('dddd, MMM D, YYYY') + ' (Agenda)'; // Or a range for agenda
-        return date.format('MMMM YYYY'); // Default
+        if (toolbar.view === Views.AGENDA) return date.format('dddd, MMM D, YYYY') + ' (Agenda)';
+        return date.format('MMMM YYYY');
     };
     return (<div className="rbc-toolbar elegant-toolbar"><div className="rbc-btn-group"><button type="button" onClick={goToCurrent} className="btn btn-outline">Today</button><button type="button" onClick={goToBack} className="btn btn-outline">‹</button><button type="button" onClick={goToNext} className="btn btn-outline">›</button></div><span className="rbc-toolbar-label">{label()}</span><div className="rbc-btn-group">{[{view:Views.MONTH,label:'Month'},{view:Views.WEEK,label:'Week'},{view:Views.DAY,label:'Day'},{view:Views.AGENDA,label:'Agenda'}].map(item=>(<button key={item.view} type="button" className={`btn btn-outline ${toolbar.view===item.view?'rbc-active':''}`} onClick={()=>toolbar.onView(item.view)}>{item.label}</button>))}</div></div>);
   }, []); 
+
   const components = useMemo(() => ({ toolbar: CustomToolbar }), [CustomToolbar]);
 
   return (
@@ -126,8 +138,8 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
           popup components={components}
           formats={{
               monthHeaderFormat: date => moment(date).format('MMMM YYYY'),
-              weekdayFormat: (date, culture, local) => local.format(date, 'ddd', culture), // Short day in month cells
-              dayHeaderFormat: date => moment(date).format('dddd, MMM D'), // Day view header
+              weekdayFormat: (date, culture, local) => local.format(date, 'ddd', culture),
+              dayHeaderFormat: date => moment(date).format('dddd, MMM D'),
               agendaHeaderFormat:({start,end})=>`${moment(start).format('ddd, MMM DD')} – ${moment(moment(end).toDate()).subtract(1,'day').format('ddd, MMM DD')}`,
               dayRangeHeaderFormat: ({ start, end }, culture, local) => 
                 local.format(start, 'ddd, MMM D', culture) + ' – ' + local.format(end, 'ddd, MMM D', culture),

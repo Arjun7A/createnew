@@ -17,8 +17,8 @@ const parseBookings = (bookingsJson) => {
     return JSON.parse(bookingsJson).map(booking => ({
       ...booking,
       startDate: normalizeDate(booking.startDate), 
-      endDate: normalizeDate(booking.endDate), // endDate is exclusive check-out   
-      createdAt: booking.createdAt ? normalizeDate(new Date(booking.createdAt)) : null // Ensure createdAt is also a Date object or null
+      endDate: normalizeDate(booking.endDate),
+      createdAt: booking.createdAt ? normalizeDate(new Date(booking.createdAt)) : null
     }));
   } catch (error) {
     console.error('Error parsing bookings from localStorage:', error);
@@ -146,7 +146,8 @@ export const saveBooking = (bookingData) => {
   
   const newBookingToStore = { 
       ...bookingData, 
-      id: newBookingId, 
+      id: newBookingId,
+      institutionalBookingDetails: bookingData.institutionalBookingDetails || null, // Ensure new field is saved
       createdAt: bookingData.createdAt instanceof Date ? bookingData.createdAt : (bookingData.createdAt ? new Date(bookingData.createdAt) : new Date())
   };
   delete newBookingToStore.originalBookingStatus; 
@@ -188,7 +189,8 @@ export const updateBooking = (bookingId, originalBookingStatus, updatedBookingDa
   let originalBooking = getAllBookings().find(b => b.id === bookingId);
   const bookingToSave = { 
       ...updatedBookingData, 
-      id: bookingId, 
+      id: bookingId,
+      institutionalBookingDetails: updatedBookingData.institutionalBookingDetails || null, // Ensure new field is saved on update
       createdAt: updatedBookingData.createdAt || originalBooking?.createdAt || new Date() 
   }; 
   return saveBooking(bookingToSave); 
@@ -205,7 +207,8 @@ export const deleteBooking = (bookingId, bookingStatus) => {
 };
 
 export const clearAllBookings = () => { 
-  localStorage.removeItem(CONFIRMED_BOOKINGS_STORAGE_KEY); localStorage.removeItem(PENCIL_BOOKINGS_STORAGE_KEY);
+  localStorage.removeItem(CONFIRMED_BOOKINGS_STORAGE_KEY); 
+  localStorage.removeItem(PENCIL_BOOKINGS_STORAGE_KEY);
 };
 
 // --- ANALYTICS FUNCTIONS ---
@@ -254,12 +257,18 @@ export const getSpecificMonthOccupancy = (year, month) => {
   const dailyStatsForMonth = getDailyOccupancyStatsForRange(monthStartDateUTC, monthEndDateUTC);
   let confirmedRoomDays = 0, pencilRoomDays = 0, totalBookedRoomDays = 0;
   Object.values(dailyStatsForMonth).forEach(dayStat => {
-    confirmedRoomDays += dayStat.confirmed; pencilRoomDays += dayStat.pencil; totalBookedRoomDays += dayStat.totalBooked;
+    confirmedRoomDays += dayStat.confirmed; 
+    pencilRoomDays += dayStat.pencil; 
+    totalBookedRoomDays += dayStat.totalBooked;
   });
   const totalRoomDaysInMonthAvailable = TOTAL_ROOMS * daysInMonth;
   return {
-    monthYear: `${year}-${String(month + 1).padStart(2, '0')}`, confirmedRoomDays, pencilRoomDays, totalBookedRoomDays,
-    totalRoomDaysInMonthAvailable, occupancyRate: totalRoomDaysInMonthAvailable > 0 ? (totalBookedRoomDays / totalRoomDaysInMonthAvailable) * 100 : 0,
+    monthYear: `${year}-${String(month + 1).padStart(2, '0')}`, 
+    confirmedRoomDays, 
+    pencilRoomDays, 
+    totalBookedRoomDays,
+    totalRoomDaysInMonthAvailable, 
+    occupancyRate: totalRoomDaysInMonthAvailable > 0 ? (totalBookedRoomDays / totalRoomDaysInMonthAvailable) * 100 : 0,
   };
 };
 
@@ -272,9 +281,14 @@ export const getMonthlyOccupancyStatsForYear = (year) => {
       const monthEndDateUTC = new Date(Date.UTC(year, m, daysInMonth));
       const dailyStats = getDailyOccupancyStatsForRange(monthStartDateUTC, monthEndDateUTC); 
       monthlyAggregatesMap[monthKey] = {
-        month: monthKey, year: year, monthNum: m, 
-        confirmedRoomDays: 0, pencilRoomDays: 0, totalRoomDaysBooked: 0,
-        totalRoomDaysAvailable: TOTAL_ROOMS * daysInMonth, daysInMonth: daysInMonth,
+        month: monthKey, 
+        year: year, 
+        monthNum: m, 
+        confirmedRoomDays: 0, 
+        pencilRoomDays: 0, 
+        totalRoomDaysBooked: 0,
+        totalRoomDaysAvailable: TOTAL_ROOMS * daysInMonth, 
+        daysInMonth: daysInMonth,
       };
       Object.values(dailyStats).forEach(dayStat => {
           monthlyAggregatesMap[monthKey].confirmedRoomDays += dayStat.confirmed;
@@ -297,11 +311,17 @@ export const getYearlyOccupancyStats = (year) => {
     const monthlyStats = getMonthlyOccupancyStatsForYear(year);
     let totalConfirmedRoomDays = 0, totalPencilRoomDays = 0, totalRoomDaysBooked = 0, totalRoomDaysInYearAvailable = 0;
     monthlyStats.forEach(month => {
-        totalConfirmedRoomDays += month.confirmedRoomDays; totalPencilRoomDays += month.pencilRoomDays;
-        totalRoomDaysBooked += month.totalRoomDaysBooked; totalRoomDaysInYearAvailable += month.totalRoomDaysAvailable;
+        totalConfirmedRoomDays += month.confirmedRoomDays; 
+        totalPencilRoomDays += month.pencilRoomDays;
+        totalRoomDaysBooked += month.totalRoomDaysBooked; 
+        totalRoomDaysInYearAvailable += month.totalRoomDaysAvailable;
     });
     return {
-        year: year, totalConfirmedRoomDays, totalPencilRoomDays, totalRoomDaysBooked, totalRoomDaysInYearAvailable,
+        year: year, 
+        totalConfirmedRoomDays, 
+        totalPencilRoomDays, 
+        totalRoomDaysBooked, 
+        totalRoomDaysInYearAvailable,
         overallOccupancyRate: totalRoomDaysInYearAvailable > 0 ? (totalRoomDaysBooked / totalRoomDaysInYearAvailable) * 100 : 0,
     };
 };

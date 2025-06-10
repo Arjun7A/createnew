@@ -1,13 +1,24 @@
 // src/components/AdminBookingManager.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { getConsolidatedBookingsForDisplay, deleteBooking, updateBooking } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES, OTHER_BOOKING_CATEGORIES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
 const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const getInitialLocalDate = (offset = 0) => {const d=new Date(); d.setDate(d.getDate() + offset); d.setHours(0,0,0,0); return d;};
-    const initialEditFormState = { id: null, originalBookingStatus: '', programTitle: '', programType: '', otherBookingCategory: '', numberOfRooms: 1, bookingStatus: 'pencil', startDate: getInitialLocalDate(), endDate: getInitialLocalDate(1) };
+    const initialEditFormState = { 
+        id: null, 
+        originalBookingStatus: '', 
+        programTitle: '', 
+        programType: '', 
+        otherBookingCategory: '', 
+        institutionalBookingDetails: '', 
+        numberOfRooms: 1, 
+        bookingStatus: 'pencil', 
+        startDate: getInitialLocalDate(), 
+        endDate: getInitialLocalDate(1) 
+    };
     const [editForm, setEditForm] = useState(initialEditFormState);
     const [bookings, setBookings] = useState([]);
     const [selectedBookingForEdit, setSelectedBookingForEdit] = useState(null);
@@ -40,11 +51,17 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
         catch (error) { console.error('Error fetching bookings:', error); addToast('Error loading bookings', 'error'); }
         finally { setLoading(false); }
     }, [addToast]);
+
     useEffect(() => { fetchBookings(); }, [fetchBookings, onBookingChanged]);
 
-    const handleDeleteBooking = async (bookingId, bookingStatus) => { 
+    const handleDeleteBooking = (bookingId, bookingStatus) => { 
         if (!window.confirm(`Delete this ${bookingStatus || ''} booking? This action cannot be undone.`)) return; setLoading(true);
-        try { await deleteBooking(bookingId, bookingStatus); addToast('Booking deleted!', 'success'); fetchBookings(); if (onBookingChanged) onBookingChanged(); } 
+        try { 
+            deleteBooking(bookingId, bookingStatus); 
+            addToast('Booking deleted!', 'success'); 
+            fetchBookings(); 
+            if (onBookingChanged) onBookingChanged(); 
+        } 
         catch (error) { console.error('Error deleting:', error); addToast(`Delete error: ${error.message}`, 'error'); }
         finally { setLoading(false); }
     };
@@ -52,9 +69,13 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const handleEditClick = (booking) => { 
         setSelectedBookingForEdit(booking);
         setEditForm({
-            id: booking.id, originalBookingStatus: booking.bookingStatus,
-            programTitle: booking.programTitle, programType: booking.programType || '',
-            otherBookingCategory: booking.otherBookingCategory || '', numberOfRooms: booking.numberOfRooms,
+            id: booking.id, 
+            originalBookingStatus: booking.bookingStatus,
+            programTitle: booking.programTitle, 
+            programType: booking.programType || '',
+            otherBookingCategory: booking.otherBookingCategory || '',
+            institutionalBookingDetails: booking.institutionalBookingDetails || '',
+            numberOfRooms: booking.numberOfRooms,
             bookingStatus: booking.bookingStatus, 
             startDate: convertUTCDatetoLocalDateForPicker(booking.startDate),
             endDate: convertUTCDatetoLocalDateForPicker(booking.endDate), 
@@ -75,7 +96,11 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             } else {
                  newState[name] = value;
             }
-            if (name === 'programType' && value !== 'OTHER_BOOKINGS') newState.otherBookingCategory = '';
+
+            if (name === 'programType') {
+                if (value !== 'OTHER_BOOKINGS') newState.otherBookingCategory = '';
+                if (value !== 'INSTITUTIONAL_BOOKINGS') newState.institutionalBookingDetails = '';
+            }
             return newState;
         });
     };
@@ -97,7 +122,6 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                 newEndDate.setDate(newEndDate.getDate() + 1);
                 newForm.endDate = newEndDate;
             } else if (name === 'endDate' && newForm.startDate && newForm.endDate && newForm.endDate.getTime() <= newForm.startDate.getTime()) {
-                // If user makes checkout same or before checkin, revert checkout to be at least one day after checkin
                 const newEndDate = new Date(newForm.startDate);
                 newEndDate.setDate(newEndDate.getDate() + 1);
                 newForm.endDate = newEndDate;
@@ -106,12 +130,14 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             return newForm;
         });
     };
+    
     const handleCancelEdit = () => { setIsEditing(false); setSelectedBookingForEdit(null); setEditForm(initialEditFormState); };
     
     const validateEditForm = () => { 
         if (!editForm.programTitle.trim()) { addToast('Title required.', 'error'); return false; }
         if (!editForm.programType) { addToast('Program type required.', 'error'); return false; }
-        if (editForm.programType === 'OTHER_BOOKINGS' && !editForm.otherBookingCategory) { addToast('Category required.', 'error'); return false;}
+        if (editForm.programType === 'OTHER_BOOKINGS' && !editForm.otherBookingCategory.trim()) { addToast('Details for "Other Bookings" are required.', 'error'); return false;}
+        if (editForm.programType === 'INSTITUTIONAL_BOOKINGS' && !editForm.institutionalBookingDetails.trim()) { addToast('Details for "Institutional Bookings" are required.', 'error'); return false;}
         
         const numRoomsFinal = parseInt(editForm.numberOfRooms.toString(), 10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) { addToast(`Rooms must be between 1 and ${TOTAL_ROOMS}.`, 'error'); return false;}
@@ -123,7 +149,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
         return true;
     };
 
-    const handleSaveEdit = async () => {
+    const handleSaveEdit = () => {
         if (!selectedBookingForEdit || !validateEditForm()) return; 
         const finalNumberOfRooms = parseInt(editForm.numberOfRooms.toString(), 10) || 1; 
         setLoading(true);
@@ -131,15 +157,21 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             const serviceStartDateUTC = convertLocalPickerDateToUTCMidnight(editForm.startDate);
             const serviceEndDateExclusiveUTC = convertLocalPickerDateToUTCMidnight(editForm.endDate); 
             const bookingPayloadForUpdate = {
-                programTitle: editForm.programTitle, programType: editForm.programType,
-                ...(editForm.programType === 'OTHER_BOOKINGS' && { otherBookingCategory: editForm.otherBookingCategory }),
+                programTitle: editForm.programTitle, 
+                programType: editForm.programType,
+                otherBookingCategory: editForm.otherBookingCategory,
+                institutionalBookingDetails: editForm.institutionalBookingDetails,
                 numberOfRooms: finalNumberOfRooms, 
                 bookingStatus: editForm.bookingStatus,
-                startDate: serviceStartDateUTC, endDate: serviceEndDateExclusiveUTC,    
+                startDate: serviceStartDateUTC, 
+                endDate: serviceEndDateExclusiveUTC,    
                 createdAt: selectedBookingForEdit.createdAt || new Date() 
             };
-            await updateBooking(selectedBookingForEdit.id, selectedBookingForEdit.originalBookingStatus, bookingPayloadForUpdate);
-            addToast('Booking updated!', 'success'); fetchBookings(); setIsEditing(false); setSelectedBookingForEdit(null);
+            updateBooking(selectedBookingForEdit.id, selectedBookingForEdit.originalBookingStatus, bookingPayloadForUpdate);
+            addToast('Booking updated!', 'success'); 
+            fetchBookings(); 
+            setIsEditing(false); 
+            setSelectedBookingForEdit(null);
             if (onBookingChanged) onBookingChanged();
         } catch (error) { addToast(`Update error: ${error.message}`, 'error'); }
         finally { setLoading(false); }
@@ -149,9 +181,9 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
         const mainTypeObj = PROGRAM_TYPES.find(pt => pt.value === booking.programType);
         let displayType = mainTypeObj ? mainTypeObj.label : (booking.programType || 'N/A');
         if (booking.programType === 'OTHER_BOOKINGS' && booking.otherBookingCategory) {
-            const categoryObj = OTHER_BOOKING_CATEGORIES.find(cat => cat.value === booking.otherBookingCategory);
-            if (categoryObj && categoryObj.label) { displayType = `${mainTypeObj.label}: ${categoryObj.label}`; }
-            else if (booking.otherBookingCategory) { displayType = `${mainTypeObj.label}: ${booking.otherBookingCategory}`; }
+            displayType = `${mainTypeObj.label}: ${booking.otherBookingCategory}`;
+        } else if (booking.programType === 'INSTITUTIONAL_BOOKINGS' && booking.institutionalBookingDetails) {
+            displayType = `${mainTypeObj.label}: ${booking.institutionalBookingDetails}`;
         }
         return displayType;
     };
@@ -166,7 +198,18 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                         <div> 
                             <div className="form-group"><label className="form-label">Program Title</label><input type="text" name="programTitle" value={editForm.programTitle} onChange={handleEditInputChange} className="form-input" /></div>
                             <div className="form-group"><label className="form-label">Program Type</label><select name="programType" value={editForm.programType} onChange={handleEditInputChange} className="form-select"><option value="">Select Type</option>{PROGRAM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
-                            {editForm.programType === 'OTHER_BOOKINGS' && (<div className="form-group"><label className="form-label">Category</label><select name="otherBookingCategory" value={editForm.otherBookingCategory} onChange={handleEditInputChange} className="form-select"><option value="">Select Category</option>{OTHER_BOOKING_CATEGORIES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>)}
+                            {editForm.programType === 'OTHER_BOOKINGS' && (
+                                <div className="form-group">
+                                    <label className="form-label">Details for Other</label>
+                                    <input type="text" name="otherBookingCategory" value={editForm.otherBookingCategory} onChange={handleEditInputChange} className="form-input" />
+                                </div>
+                            )}
+                            {editForm.programType === 'INSTITUTIONAL_BOOKINGS' && (
+                                <div className="form-group">
+                                    <label className="form-label">Details for Institutional</label>
+                                    <input type="text" name="institutionalBookingDetails" value={editForm.institutionalBookingDetails} onChange={handleEditInputChange} className="form-input" />
+                                </div>
+                            )}
                             <div className="form-group"><label className="form-label">Rooms</label>
                                 <input type="text" name="numberOfRooms" value={editForm.numberOfRooms} onChange={handleEditInputChange} onBlur={handleNumberOfRoomsBlurEdit} className="form-input" />
                             </div>

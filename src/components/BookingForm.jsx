@@ -1,7 +1,7 @@
 // src/components/BookingForm.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { saveBooking, findAvailableSlots, checkAvailabilityForRange, getBookingsInPeriod } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES, OTHER_BOOKING_CATEGORIES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -27,7 +27,14 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     const initialSearchPeriodStartLocal = getInitialLocalDate(); 
     const initialSearchPeriodEndLocal = getInitialLocalDate(7); 
 
-    const [formData, setFormData] = useState({ programTitle: '', programType: '', otherBookingCategory: '', numberOfRooms: 1, bookingStatus: 'pencil' });
+    const [formData, setFormData] = useState({ 
+        programTitle: '', 
+        programType: '', 
+        otherBookingCategory: '', 
+        institutionalBookingDetails: '', 
+        numberOfRooms: 1, 
+        bookingStatus: 'pencil' 
+    });
     const [searchCriteria, setSearchCriteria] = useState({ 
         searchPeriodStart: initialSearchPeriodStartLocal, 
         searchPeriodEnd: initialSearchPeriodEndLocal,     
@@ -82,12 +89,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDates]);
 
-    const reCheckSelectedSlotAvailability = useCallback(async (slotToCheck, rooms) => {
+    const reCheckSelectedSlotAvailability = useCallback((slotToCheck, rooms) => {
         if (!slotToCheck || !slotToCheck.startDate || !slotToCheck.endDate || rooms < 1) { 
             setAvailabilityCheckResult(null); return; 
         }
         try {
-            const result = await checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms);
+            const result = checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms);
             setAvailabilityCheckResult(result);
         } catch (error) { addToast(`Error re-checking: ${error.message}`, 'error'); setAvailabilityCheckResult(null); }
     }, [addToast]);
@@ -105,7 +112,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             } else {
                 newState[name] = value;
             }
-            if (name === 'programType' && value !== 'OTHER_BOOKINGS') newState.otherBookingCategory = '';
+
+            if (name === 'programType') {
+                if (value !== 'OTHER_BOOKINGS') newState.otherBookingCategory = '';
+                if (value !== 'INSTITUTIONAL_BOOKINGS') newState.institutionalBookingDetails = '';
+            }
+
             return newState;
         });
 
@@ -146,7 +158,6 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 let duration = (name === 'stayDuration' && value === "") ? prev.stayDuration : parseInt(currentSearch.stayDuration.toString(), 10);
                 if (isNaN(duration)) duration = 1;
 
-
                 if (earliestCheckin && typeof duration === 'number' && duration > 0) {
                     const minCheckoutDate = new Date(earliestCheckin.getTime() + duration * 24 * 60 * 60 * 1000);
                     if (!currentSearch.searchPeriodEnd || currentSearch.searchPeriodEnd.getTime() < minCheckoutDate.getTime()) {
@@ -176,7 +187,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         });
     };
 
-    const handleFindAvailableSlots = async () => {
+    const handleFindAvailableSlots = () => {
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
             addToast(`Please enter a valid number of rooms (1-${TOTAL_ROOMS}).`, 'error');
@@ -206,7 +217,7 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         setIsFindingSlots(true); setSelectedSlot(null); setAvailabilityCheckResult(null); setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
         
         try {
-            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
+            const slots = findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
             setAvailableSlots(slots); 
             if (slots.length === 0) addToast('No available slots found.', 'warning');
             else addToast(`Found ${slots.length} potential ${durationNightsFinal}-night stay(s).`, 'success');
@@ -234,7 +245,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     const validateBookingForm = () => {
         if (!formData.programTitle.trim()) { addToast('Program title is required.', 'error'); return false; }
         if (!formData.programType) { addToast('Program type is required.', 'error'); return false; }
-        if (formData.programType === 'OTHER_BOOKINGS' && !formData.otherBookingCategory) { addToast('Category for "Other Bookings" is required.', 'error'); return false; }
+        if (formData.programType === 'OTHER_BOOKINGS' && !formData.otherBookingCategory.trim()) { addToast('Details for "Other Bookings" are required.', 'error'); return false; }
+        if (formData.programType === 'INSTITUTIONAL_BOOKINGS' && !formData.institutionalBookingDetails.trim()) { addToast('Details for "Institutional Bookings" are required.', 'error'); return false; }
         
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
         if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
@@ -246,31 +258,52 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         if (!availabilityCheckResult.isAvailable) { addToast('Selected slot is not available for the requested rooms.', 'error'); return false;}
         return true;
     };
-    const handleBookRooms = async () => {
+
+    const handleBookRooms = () => {
         if (!validateBookingForm()) return; 
         const finalNumberOfRooms = parseInt(formData.numberOfRooms.toString(), 10) || 1;
         setIsBooking(true);
         try {
             const bookingPayload = {
-                programTitle: formData.programTitle, programType: formData.programType,
-                ...(formData.programType === 'OTHER_BOOKINGS' && { otherBookingCategory: formData.otherBookingCategory }),
+                programTitle: formData.programTitle, 
+                programType: formData.programType,
+                otherBookingCategory: formData.otherBookingCategory,
+                institutionalBookingDetails: formData.institutionalBookingDetails,
                 numberOfRooms: finalNumberOfRooms, 
                 bookingStatus: formData.bookingStatus,
                 startDate: selectedSlot.startDate, 
                 endDate: selectedSlot.endDate, 
             };
-            await saveBooking(bookingPayload);
-            addToast('Booking successful!', 'success'); if (onBookingAdded) onBookingAdded(); resetForm();
+            saveBooking(bookingPayload);
+            addToast('Booking successful!', 'success'); 
+            if (onBookingAdded) onBookingAdded(); 
+            resetForm();
         } catch (error) { addToast(`Booking Error: ${error.message}`, 'error'); }
         finally { setIsBooking(false); }
     };
 
     const resetForm = () => { 
-        setFormData({ programTitle: '', programType: '', otherBookingCategory: '', numberOfRooms: 1, bookingStatus: 'pencil', });
+        setFormData({ 
+            programTitle: '', 
+            programType: '', 
+            otherBookingCategory: '', 
+            institutionalBookingDetails: '', 
+            numberOfRooms: 1, 
+            bookingStatus: 'pencil' 
+        });
         const initialStart = getInitialLocalDate();
-        setSearchCriteria({ searchPeriodStart: initialStart, searchPeriodEnd: getInitialLocalDate(7), stayDuration: 1, });
-        setAvailableSlots([]); setSelectedSlot(null); setAvailabilityCheckResult(null); setIsFindingSlots(false); setIsBooking(false);
-        setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
+        setSearchCriteria({ 
+            searchPeriodStart: initialStart, 
+            searchPeriodEnd: getInitialLocalDate(7), 
+            stayDuration: 1 
+        });
+        setAvailableSlots([]); 
+        setSelectedSlot(null); 
+        setAvailabilityCheckResult(null); 
+        setIsFindingSlots(false); 
+        setIsBooking(false);
+        setBookingsInSearchPeriod([]); 
+        setShowPeriodBookingsDetails(false);
     };
     
     return (
@@ -398,15 +431,58 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             {selectedSlot && availabilityCheckResult && availabilityCheckResult.isAvailable && ( 
                 <div className="form-step">
                     <h3 className="step-title">Step 3: Enter Program Details & Confirm</h3>
-                    <div className="form-group"><label className="form-label">Program Title</label><input type="text" name="programTitle" value={formData.programTitle} onChange={handleFormInputChange} className="form-input" placeholder="Program title"/></div>
-                    <div className="grid grid-halves">
-                        <div><div className="form-group"><label className="form-label">Program Type</label><select name="programType" value={formData.programType} onChange={handleFormInputChange} className="form-select"><option value="">Select Type</option>{PROGRAM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div></div>
-                        {formData.programType === 'OTHER_BOOKINGS' && (<div><div className="form-group"><label className="form-label">Category for Other</label><select name="otherBookingCategory" value={formData.otherBookingCategory} onChange={handleFormInputChange} className="form-select"><option value="">Select Category</option>{OTHER_BOOKING_CATEGORIES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div></div>)}
+                    <div className="form-group">
+                        <label className="form-label">Program Title</label>
+                        <input type="text" name="programTitle" value={formData.programTitle} onChange={handleFormInputChange} className="form-input" placeholder="Program title"/>
                     </div>
-                    <div className="form-group"><label className="form-label">Booking Type</label><div className="radio-group">
-                        <label className="radio-label"><input type="radio" name="bookingStatus" value="pencil" checked={formData.bookingStatus === 'pencil'} onChange={handleFormInputChange}/> Pencil</label>
-                        <label className="radio-label"><input type="radio" name="bookingStatus" value="confirmed" checked={formData.bookingStatus === 'confirmed'} onChange={handleFormInputChange}/> Confirmed</label>
-                    </div></div>
+                    <div className="grid grid-halves">
+                        <div>
+                            <div className="form-group">
+                                <label className="form-label">Program Type</label>
+                                <select name="programType" value={formData.programType} onChange={handleFormInputChange} className="form-select">
+                                    <option value="">Select Type</option>
+                                    {PROGRAM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        {formData.programType === 'OTHER_BOOKINGS' && (
+                            <div>
+                                <div className="form-group">
+                                    <label className="form-label">Details for Other Booking</label>
+                                    <input 
+                                        type="text" 
+                                        name="otherBookingCategory" 
+                                        value={formData.otherBookingCategory} 
+                                        onChange={handleFormInputChange} 
+                                        className="form-input"
+                                        placeholder="e.g., Conference Name"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        {formData.programType === 'INSTITUTIONAL_BOOKINGS' && (
+                            <div>
+                                <div className="form-group">
+                                    <label className="form-label">Details for Institutional Booking</label>
+                                    <input 
+                                        type="text" 
+                                        name="institutionalBookingDetails" 
+                                        value={formData.institutionalBookingDetails} 
+                                        onChange={handleFormInputChange} 
+                                        className="form-input"
+                                        placeholder="e.g., Director's Office Event"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Booking Type</label>
+                        <div className="radio-group">
+                            <label className="radio-label"><input type="radio" name="bookingStatus" value="pencil" checked={formData.bookingStatus === 'pencil'} onChange={handleFormInputChange}/> Pencil</label>
+                            <label className="radio-label"><input type="radio" name="bookingStatus" value="confirmed" checked={formData.bookingStatus === 'confirmed'} onChange={handleFormInputChange}/> Confirmed</label>
+                        </div>
+                    </div>
                     <div className="button-group">
                         <button onClick={handleBookRooms} disabled={isBooking || !selectedSlot || !availabilityCheckResult || !availabilityCheckResult.isAvailable} className={`btn ${isBooking ? 'btn-disabled' : 'btn-success'}`}>
                             {isBooking ? <><div className="spinner"></div> Booking...</> : "Book Now"}
