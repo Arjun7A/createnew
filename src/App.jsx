@@ -24,7 +24,7 @@ function App() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const navigate = useNavigate();
 
-  const ADMIN_EMAIL = 'arjun.avittathur@gmail.com';
+  const ADMIN_EMAIL = 'admin_mdp@iimcal.ac.in';
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
