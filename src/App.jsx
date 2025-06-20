@@ -24,7 +24,7 @@ function App() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const navigate = useNavigate();
 
-  const ADMIN_EMAIL = 'arjun.avittathur@gmail.com';
+  const ADMIN_EMAILS = ['arjun.avittathur@gmail.com', 'admin_mdp@iimcal.ac.in'];
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -72,7 +72,7 @@ function App() {
       <Route path="/" element={
         !session ? (
           <Login />
-        ) : session.user.email !== ADMIN_EMAIL ? (
+        ) : !ADMIN_EMAILS.includes(session.user.email) ? (
           <div className="access-denied" style={{textAlign: 'center', padding: '50px', fontFamily: 'sans-serif'}}>
             <h2>Access Restricted</h2>
             <p>Only authorized administrators may access this system.</p>
