@@ -1,5 +1,16 @@
 // src/constants.js
-export const TOTAL_ROOMS = 133;
+export const ROOM_TYPES = [
+  { value: 'MDC', label: 'MDC', totalRooms: 133 },
+  { value: 'TATA_HALL', label: 'Tata Hall', totalRooms: 16 },
+  { value: 'MDC_SUITES', label: 'MDC Suites', totalRooms: 14 }
+];
+
+export const TOTAL_ROOMS = 133; // Keep for backward compatibility, will be dynamic based on room type
+
+export const getTotalRoomsForType = (roomType) => {
+  const roomTypeObj = ROOM_TYPES.find(rt => rt.value === roomType);
+  return roomTypeObj ? roomTypeObj.totalRooms : 133;
+};
 
 export const PROGRAM_TYPES = [
   { value: 'OPEN_LDP', label: 'Open LDP' },

@@ -39,6 +39,16 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   font-family: var(--font-family-sans);
   background-color: var(--background-color);
@@ -51,6 +61,9 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header.elegant-header {
@@ -620,6 +633,26 @@ body {
   color: var(--text-light);
 }
 .app-footer p { margin-bottom: 5px; }
+
+/* Main content area - grows to push footer down */
+main {
+  flex: 1;
+}
+
+.main-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Section spacing for better footer placement */
+section {
+  margin-bottom: 2rem;
+}
+
+section:last-of-type {
+  margin-bottom: 3rem;
+}
 
 @media (max-width: 768px) {
   .elegant-table thead {

@@ -10,6 +10,7 @@ import AvailabilityCalendar from './components/AvailabilityCalendar';
 import AdminBookingManager from './components/AdminBookingManager';
 import BookingAnalyticsDashboard from './components/BookingAnalyticsDashboard';
 import Toast from './components/Toast';
+import Footer from './components/Footer';
 import './styles/main.css';
 
 function App() {
@@ -125,7 +126,7 @@ function App() {
             )}
             
             <div className="toast-container">{toasts.map(toast => <Toast key={toast.id.toString()} message={toast.message} type={toast.type} />)}</div>
-            <footer className="app-footer"><p>&copy; {new Date().getFullYear()} IIMC MDC Room Booking System. All rights reserved.</p></footer>
+            <Footer />
           </div>
         )
       } />

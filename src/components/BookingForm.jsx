@@ -1,7 +1,7 @@
 // src/components/BookingForm.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { saveBooking, findAvailableSlots, checkAvailabilityForRange, getBookingsInPeriod } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -33,7 +33,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         otherBookingCategory: '', 
         institutionalBookingDetails: '', 
         numberOfRooms: 1, 
-        bookingStatus: 'pencil' 
+        bookingStatus: 'pencil',
+        roomType: 'MDC' 
     });
     const [searchCriteria, setSearchCriteria] = useState({ 
         searchPeriodStart: initialSearchPeriodStartLocal, 
@@ -89,12 +90,12 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDates]);
 
-    const reCheckSelectedSlotAvailability = useCallback(async (slotToCheck, rooms) => {
+    const reCheckSelectedSlotAvailability = useCallback(async (slotToCheck, rooms, roomType) => {
         if (!slotToCheck || !slotToCheck.startDate || !slotToCheck.endDate || rooms < 1) { 
             setAvailabilityCheckResult(null); return; 
         }
         try {
-            const result = await checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms);
+            const result = await checkAvailabilityForRange(slotToCheck.startDate, slotToCheck.endDate, rooms, [], roomType);
             setAvailabilityCheckResult(result);
         } catch (error) { addToast(`Error re-checking: ${error.message}`, 'error'); setAvailabilityCheckResult(null); }
     }, [addToast]);
@@ -121,11 +122,15 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             return newState;
         });
 
-        if (name === 'numberOfRooms') {
+        if (name === 'numberOfRooms' || name === 'roomType') {
             const numValue = parseInt(value, 10);
-            const roomsToRecheck = isNaN(numValue) || numValue < 1 ? formData.numberOfRooms : Math.min(numValue, TOTAL_ROOMS); 
+            const maxRoomsForType = getTotalRoomsForType(name === 'roomType' ? value : formData.roomType);
+            const roomsToRecheck = (name === 'numberOfRooms') ? 
+                (isNaN(numValue) || numValue < 1 ? formData.numberOfRooms : Math.min(numValue, maxRoomsForType)) : 
+                formData.numberOfRooms; 
+            const roomTypeToCheck = name === 'roomType' ? value : formData.roomType;
             if (selectedSlot && roomsToRecheck >=1) { 
-                 reCheckSelectedSlotAvailability(selectedSlot, roomsToRecheck);
+                 reCheckSelectedSlotAvailability(selectedSlot, roomsToRecheck, roomTypeToCheck);
             }
         }
     };
@@ -133,10 +138,11 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
     const handleNumberOfRoomsBlur = (e) => {
         const { value } = e.target;
         const numValue = parseInt(value, 10);
-        const validatedRooms = isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, TOTAL_ROOMS);
+        const maxRoomsForType = getTotalRoomsForType(formData.roomType);
+        const validatedRooms = isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, maxRoomsForType);
         setFormData(prev => ({ ...prev, numberOfRooms: validatedRooms }));
         if (selectedSlot) { 
-            reCheckSelectedSlotAvailability(selectedSlot, validatedRooms);
+            reCheckSelectedSlotAvailability(selectedSlot, validatedRooms, formData.roomType);
         }
     };
 
@@ -189,8 +195,9 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
 
     const handleFindAvailableSlots = async () => {
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
-        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
-            addToast(`Please enter a valid number of rooms (1-${TOTAL_ROOMS}).`, 'error');
+        const maxRoomsForType = getTotalRoomsForType(formData.roomType);
+        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > maxRoomsForType) {
+            addToast(`Please enter a valid number of rooms (1-${maxRoomsForType}) for ${ROOM_TYPES.find(rt => rt.value === formData.roomType)?.label}.`, 'error');
             setFormData(prev => ({...prev, numberOfRooms: 1})); 
             return;
         }
@@ -217,14 +224,14 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         setIsFindingSlots(true); setSelectedSlot(null); setAvailabilityCheckResult(null); setBookingsInSearchPeriod([]); setShowPeriodBookingsDetails(false);
         
         try {
-            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal);
+            const slots = await findAvailableSlots(earliestCheckInUTC, latestCheckOutByUTC, durationNightsFinal, numRoomsFinal, formData.roomType);
             setAvailableSlots(slots); 
             if (slots.length === 0) addToast('No available slots found.', 'warning');
             else addToast(`Found ${slots.length} potential ${durationNightsFinal}-night stay(s).`, 'success');
 
             const displayPeriodEndForOverlap = new Date(latestCheckOutByUTC);
             displayPeriodEndForOverlap.setUTCDate(displayPeriodEndForOverlap.getUTCDate() - 1); 
-            const overlappingBookings = await getBookingsInPeriod(earliestCheckInUTC, displayPeriodEndForOverlap);
+            const overlappingBookings = await getBookingsInPeriod(earliestCheckInUTC, displayPeriodEndForOverlap, formData.roomType);
             setBookingsInSearchPeriod(overlappingBookings);
             if (overlappingBookings.length > 0) setShowPeriodBookingsDetails(true); 
         } catch (error) { addToast(`Error during search: ${error.message}`, 'error'); }
@@ -239,18 +246,20 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
         }
         setSelectedSlot(slotWithExclusiveEndDate);
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10) || 1;
-        reCheckSelectedSlotAvailability(slotWithExclusiveEndDate, numRoomsFinal);
+        reCheckSelectedSlotAvailability(slotWithExclusiveEndDate, numRoomsFinal, formData.roomType);
     };
 
     const validateBookingForm = () => {
         if (!formData.programTitle.trim()) { addToast('Program title is required.', 'error'); return false; }
         if (!formData.programType) { addToast('Program type is required.', 'error'); return false; }
+        if (!formData.roomType) { addToast('Room type is required.', 'error'); return false; }
         if (formData.programType === 'OTHER_BOOKINGS' && !formData.otherBookingCategory.trim()) { addToast('Details for "Other Bookings" are required.', 'error'); return false; }
         if (formData.programType === 'INSTITUTIONAL_BOOKINGS' && !formData.institutionalBookingDetails.trim()) { addToast('Details for "Institutional Bookings" are required.', 'error'); return false; }
         
+        const maxRoomsForType = getTotalRoomsForType(formData.roomType);
         const numRoomsFinal = parseInt(formData.numberOfRooms.toString(),10);
-        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) {
-            addToast(`Number of rooms must be between 1 and ${TOTAL_ROOMS}.`, 'error'); return false;
+        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > maxRoomsForType) {
+            addToast(`Number of rooms must be between 1 and ${maxRoomsForType}.`, 'error'); return false;
         }
         
         if (!selectedSlot) { addToast('Please select an available stay period.', 'error'); return false; }
@@ -272,7 +281,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 numberOfRooms: finalNumberOfRooms, 
                 bookingStatus: formData.bookingStatus,
                 startDate: selectedSlot.startDate, 
-                endDate: selectedSlot.endDate, 
+                endDate: selectedSlot.endDate,
+                roomType: formData.roomType, // Add room type to payload
             };
             await saveBooking(bookingPayload);
             addToast('Booking successful!', 'success'); 
@@ -289,7 +299,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
             otherBookingCategory: '', 
             institutionalBookingDetails: '', 
             numberOfRooms: 1, 
-            bookingStatus: 'pencil' 
+            bookingStatus: 'pencil',
+            roomType: 'MDC' 
         });
         const initialStart = getInitialLocalDate();
         setSearchCriteria({ 
@@ -341,6 +352,23 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                 <div className="grid grid-halves"> 
                     <div>
                         <div className="form-group">
+                            <label className="form-label">Room Type</label>
+                            <select 
+                                name="roomType" 
+                                value={formData.roomType} 
+                                onChange={handleFormInputChange}
+                                className="form-select"
+                            >
+                                {ROOM_TYPES.map(opt => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label} ({opt.totalRooms} rooms)
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="form-group">
                             <label className="form-label">Number of Nights</label>
                             <input 
                                 type="text" 
@@ -353,6 +381,8 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                             />
                         </div>
                     </div>
+                </div>
+                <div className="grid grid-halves"> 
                     <div>
                         <div className="form-group">
                             <label className="form-label">Number of Rooms</label>
@@ -365,8 +395,11 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                                 className="form-input"
                                 placeholder="e.g., 1"
                             />
-                            <p className="form-hint">Max {TOTAL_ROOMS} rooms.</p>
+                            <p className="form-hint">Max {getTotalRoomsForType(formData.roomType)} rooms for {ROOM_TYPES.find(rt => rt.value === formData.roomType)?.label}.</p>
                         </div>
+                    </div>
+                    <div>
+                        {/* Empty column for grid balance */}
                     </div>
                 </div>
                 <button onClick={handleFindAvailableSlots} disabled={isFindingSlots || isBooking} className="btn btn-primary btn-full-width">{isFindingSlots ? <><div className="spinner"></div> Finding...</> : "Find Available Stay Periods"}</button>
@@ -445,6 +478,20 @@ const BookingForm = ({ addToast, onBookingAdded, selectedDates }) => {
                                 </select>
                             </div>
                         </div>
+                        <div>
+                            <div className="form-group">
+                                <label className="form-label">Room Type</label>
+                                <select name="roomType" value={formData.roomType} onChange={handleFormInputChange} className="form-select">
+                                    {ROOM_TYPES.map(opt => (
+                                        <option key={opt.value} value={opt.value}>
+                                            {opt.label} ({opt.totalRooms} rooms)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-halves">
                         {formData.programType === 'OTHER_BOOKINGS' && (
                             <div>
                                 <div className="form-group">

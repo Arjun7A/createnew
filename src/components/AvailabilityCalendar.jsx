@@ -4,7 +4,7 @@ import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { getConsolidatedBookingsForDisplay } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
 
 // Import @react-pdf/renderer components
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink } from '@react-pdf/renderer';
@@ -139,15 +139,18 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState(Views.MONTH);
   const [currentCalDate, setCurrentCalDate] = useState(new Date()); 
+  const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL'); // Calendar shows ALL room types by default
 
   const fetchAndSetCalendarEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const displayBookings = await getConsolidatedBookingsForDisplay(); 
+      // Calendar shows all room types by default, can be filtered
+      const roomTypeForQuery = selectedRoomTypeFilter === 'ALL' ? null : selectedRoomTypeFilter;
+      const displayBookings = await getConsolidatedBookingsForDisplay(roomTypeForQuery); 
       if (Array.isArray(displayBookings)) {
         const events = displayBookings.map(booking => ({
           id: booking.id,
-          title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms) - ${booking.bookingStatus}`,
+          title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms, ${ROOM_TYPES.find(rt => rt.value === booking.roomType)?.label || booking.roomType}) - ${booking.bookingStatus}`,
           start: new Date(booking.startDate),       
           end: new Date(booking.endDate),     
           allDay: true, 
@@ -162,7 +165,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
       setCalendarEvents([]);
     }
     finally { setLoading(false); }
-  }, []);
+  }, [selectedRoomTypeFilter]);
 
   useEffect(() => { fetchAndSetCalendarEvents(); }, [refreshTrigger, fetchAndSetCalendarEvents]);
 
@@ -256,7 +259,30 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
   return (
     <div className="card calendar-card elegant-calendar-wrapper">
       <h2 className="form-section-title">Room Booking Calendar</h2>
-      <p className="calendar-instructions">Displays confirmed and pencil bookings. Click/drag dates to pre-fill search. Total rooms: {TOTAL_ROOMS}.</p>
+      
+      {/* Room Type Filter */}
+      <div className="filter-section" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+        <label className="form-label">Filter by Room Type:</label>
+        <select 
+          value={selectedRoomTypeFilter} 
+          onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
+          className="form-select"
+          style={{ maxWidth: '200px', marginLeft: '10px' }}
+        >
+          <option value="ALL">All Room Types</option>
+          {ROOM_TYPES.map(rt => (
+            <option key={rt.value} value={rt.value}>{rt.label}</option>
+          ))}
+        </select>
+      </div>
+      
+      <p className="calendar-instructions">
+        Displays confirmed and pencil bookings. Click/drag dates to pre-fill search. 
+        {selectedRoomTypeFilter === 'ALL' ? 
+          `All room types shown.` : 
+          `Showing: ${ROOM_TYPES.find(rt => rt.value === selectedRoomTypeFilter)?.label} (${getTotalRoomsForType(selectedRoomTypeFilter)} rooms).`
+        }
+      </p>
       {loading ? ( <div className="centered-spinner-container" style={{height:'400px'}}><div className="spinner-large"></div><p>Loading Calendar...</p></div> ) : (
         <Calendar
           localizer={localizer} events={calendarEvents} startAccessor="start" endAccessor="end"    
@@ -268,7 +294,8 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
             const startDateStr=moment.utc(event.start).format('ddd, MMM DD, YYYY');
             const inclusiveEndDate = new Date(event.resource.endDate); inclusiveEndDate.setUTCDate(inclusiveEndDate.getUTCDate() - 1);
             const inclusiveEndDateStr = moment.utc(inclusiveEndDate).format('ddd, MMM DD, YYYY'); 
-            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nLast Night: ${inclusiveEndDateStr} (Check-out: ${moment.utc(event.resource.endDate).format('ddd, MMM DD, YYYY')})`;
+            const roomTypeLabel = ROOM_TYPES.find(rt => rt.value === event.resource.roomType)?.label || event.resource.roomType;
+            return `Title: ${event.resource.programTitle}\nType: ${getDisplayProgramTypeForCalendar(event.resource)}\nRoom Type: ${roomTypeLabel}\nRooms: ${event.resource.numberOfRooms}\nStatus: ${event.resource.bookingStatus}\nCheck-in: ${startDateStr}\nLast Night: ${inclusiveEndDateStr} (Check-out: ${moment.utc(event.resource.endDate).format('ddd, MMM DD, YYYY')})`;
           }}
           popup components={components}
           formats={{

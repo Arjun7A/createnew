@@ -1,19 +1,20 @@
 // src/components/AdminBookingManager.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { getConsolidatedBookingsForDisplay, deleteBooking, updateBooking } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
 const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const getInitialLocalDate = (offset = 0) => {const d=new Date(); d.setDate(d.getDate() + offset); d.setHours(0,0,0,0); return d;};
-    const initialEditFormState = { id: null, originalBookingStatus: '', programTitle: '', programType: '', otherBookingCategory: '', institutionalBookingDetails: '', numberOfRooms: 1, bookingStatus: 'pencil', startDate: getInitialLocalDate(), endDate: getInitialLocalDate(1) };
+    const initialEditFormState = { id: null, originalBookingStatus: '', programTitle: '', programType: '', otherBookingCategory: '', institutionalBookingDetails: '', numberOfRooms: 1, bookingStatus: 'pencil', startDate: getInitialLocalDate(), endDate: getInitialLocalDate(1), roomType: 'MDC' };
     
     const [editForm, setEditForm] = useState(initialEditFormState);
     const [bookings, setBookings] = useState([]);
     const [selectedBookingForEdit, setSelectedBookingForEdit] = useState(null);
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL'); // Filter for viewing bookings
 
     const convertUTCDatetoLocalDateForPicker = (utcDate) => {
         if (!utcDate) return getInitialLocalDate();
@@ -39,14 +40,16 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const fetchBookings = useCallback(async () => { 
         setLoading(true);
         try { 
-            const data = await getConsolidatedBookingsForDisplay();
+            // For admin dashboard, always show ALL bookings unless specifically filtering
+            const roomTypeForQuery = selectedRoomTypeFilter === 'ALL' ? null : selectedRoomTypeFilter;
+            const data = await getConsolidatedBookingsForDisplay(roomTypeForQuery);
             setBookings(data); 
         } 
         catch (error) { console.error('Error fetching bookings:', error); addToast('Error loading bookings', 'error'); }
         finally { setLoading(false); }
-    }, [addToast]);
+    }, [addToast, selectedRoomTypeFilter]);
 
-    useEffect(() => { fetchBookings(); }, [fetchBookings, onBookingChanged]);
+    useEffect(() => { fetchBookings(); }, [fetchBookings, onBookingChanged, selectedRoomTypeFilter]);
 
     const handleDeleteBooking = async (bookingId, bookingStatus) => { 
         if (!window.confirm(`Delete this ${bookingStatus || ''} booking? This action cannot be undone.`)) return; 
@@ -73,7 +76,8 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             numberOfRooms: booking.numberOfRooms,
             bookingStatus: booking.bookingStatus, 
             startDate: convertUTCDatetoLocalDateForPicker(booking.startDate),
-            endDate: convertUTCDatetoLocalDateForPicker(new Date(booking.endDate)), 
+            endDate: convertUTCDatetoLocalDateForPicker(new Date(booking.endDate)),
+            roomType: booking.roomType || 'MDC', 
         });
         setIsEditing(true);
     };
@@ -103,9 +107,10 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
      const handleNumberOfRoomsBlurEdit = (e) => {
         const { value } = e.target;
         const numValue = parseInt(value, 10);
+        const maxRoomsForType = getTotalRoomsForType(editForm.roomType);
         setEditForm(prev => ({
             ...prev,
-            numberOfRooms: isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, TOTAL_ROOMS)
+            numberOfRooms: isNaN(numValue) || numValue < 1 ? 1 : Math.min(numValue, maxRoomsForType)
         }));
     };
 
@@ -131,11 +136,13 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const validateEditForm = () => { 
         if (!editForm.programTitle.trim()) { addToast('Title required.', 'error'); return false; }
         if (!editForm.programType) { addToast('Program type required.', 'error'); return false; }
+        if (!editForm.roomType) { addToast('Room type required.', 'error'); return false; }
         if (editForm.programType === 'OTHER_BOOKINGS' && !editForm.otherBookingCategory.trim()) { addToast('Details for "Other Bookings" are required.', 'error'); return false;}
         if (editForm.programType === 'INSTITUTIONAL_BOOKINGS' && !editForm.institutionalBookingDetails.trim()) { addToast('Details for "Institutional Bookings" are required.', 'error'); return false;}
         
+        const maxRoomsForType = getTotalRoomsForType(editForm.roomType);
         const numRoomsFinal = parseInt(editForm.numberOfRooms.toString(), 10);
-        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > TOTAL_ROOMS) { addToast(`Rooms must be between 1 and ${TOTAL_ROOMS}.`, 'error'); return false;}
+        if (isNaN(numRoomsFinal) || numRoomsFinal < 1 || numRoomsFinal > maxRoomsForType) { addToast(`Rooms must be between 1 and ${maxRoomsForType}.`, 'error'); return false;}
 
         if (!editForm.startDate || !editForm.endDate) { addToast('Dates are required.', 'error'); return false;}
         const localStart = new Date(editForm.startDate.getFullYear(), editForm.startDate.getMonth(), editForm.startDate.getDate());
@@ -159,7 +166,8 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                 numberOfRooms: finalNumberOfRooms, 
                 bookingStatus: editForm.bookingStatus,
                 startDate: serviceStartDateUTC, 
-                endDate: serviceEndDateExclusiveUTC,    
+                endDate: serviceEndDateExclusiveUTC,
+                roomType: editForm.roomType,    
                 createdAt: selectedBookingForEdit.createdAt || new Date() 
             };
             await updateBooking(selectedBookingForEdit.id, selectedBookingForEdit.originalBookingStatus, bookingPayloadForUpdate);
@@ -186,6 +194,25 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     return (
         <div className="card admin-card">
             <h2 className="form-section-title">Admin Booking Management</h2>
+            
+            {/* Room Type Filter */}
+            {!isEditing && (
+                <div className="filter-section" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <label className="form-label">Filter by Room Type:</label>
+                    <select 
+                        value={selectedRoomTypeFilter} 
+                        onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
+                        className="form-select"
+                        style={{ maxWidth: '200px' }}
+                    >
+                        <option value="ALL">All Room Types</option>
+                        {ROOM_TYPES.map(rt => (
+                            <option key={rt.value} value={rt.value}>{rt.label}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+            
             {isEditing && selectedBookingForEdit ? (
                 <div className="edit-booking-form-admin">
                     <h3 className="edit-title">Edit: <span className="highlight">{selectedBookingForEdit.programTitle}</span></h3>
@@ -193,6 +220,12 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                         <div> 
                             <div className="form-group"><label className="form-label">Program Title</label><input type="text" name="programTitle" value={editForm.programTitle} onChange={handleEditInputChange} className="form-input" /></div>
                             <div className="form-group"><label className="form-label">Program Type</label><select name="programType" value={editForm.programType} onChange={handleEditInputChange} className="form-select"><option value="">Select Type</option>{PROGRAM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select></div>
+                            <div className="form-group">
+                                <label className="form-label">Room Type</label>
+                                <select name="roomType" value={editForm.roomType} onChange={handleEditInputChange} className="form-select">
+                                    {ROOM_TYPES.map(opt => <option key={opt.value} value={opt.value}>{opt.label} ({opt.totalRooms} rooms)</option>)}
+                                </select>
+                            </div>
                             {editForm.programType === 'OTHER_BOOKINGS' && (
                                 <div className="form-group">
                                     <label className="form-label">Details for Other</label>
@@ -205,7 +238,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                                     <input type="text" name="institutionalBookingDetails" value={editForm.institutionalBookingDetails} onChange={handleEditInputChange} className="form-input" />
                                 </div>
                             )}
-                            <div className="form-group"><label className="form-label">Rooms</label>
+                            <div className="form-group"><label className="form-label">Rooms (Max: {getTotalRoomsForType(editForm.roomType)})</label>
                                 <input type="text" name="numberOfRooms" value={editForm.numberOfRooms} onChange={handleEditInputChange} onBlur={handleNumberOfRoomsBlurEdit} className="form-input" />
                             </div>
                         </div>
@@ -226,11 +259,12 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
                     {!loading && bookings.length === 0 && ( <p className="no-bookings">No bookings found.</p> )}
                     {!loading && bookings.length > 0 && (
                         <div className="bookings-table-container"><table className="bookings-table elegant-table">
-                            <thead><tr><th>Title</th><th>Type</th><th>Rooms</th><th>Check-in</th><th>Last Night</th><th>Check-out Day</th><th>Status</th><th>Actions</th></tr></thead>
+                            <thead><tr><th>Title</th><th>Type</th><th>Room Type</th><th>Rooms</th><th>Check-in</th><th>Last Night</th><th>Check-out Day</th><th>Status</th><th>Actions</th></tr></thead>
                             <tbody>
                             {bookings.map(booking => ( 
                                 <tr key={booking.id} className={`booking-row status-${booking.bookingStatus?.toLowerCase()}`}>
                                 <td data-label="Title">{booking.programTitle}</td><td data-label="Type">{getDisplayProgramType(booking)}</td>
+                                <td data-label="Room Type">{ROOM_TYPES.find(rt => rt.value === booking.roomType)?.label || booking.roomType}</td>
                                 <td data-label="Rooms">{booking.numberOfRooms}</td><td data-label="Check-in">{formatDateForDisplay(booking.startDate)}</td>
                                 <td data-label="Last Night">{formatInclusiveLastDayForDisplay(booking.endDate)}</td>
                                 <td data-label="Check-out Day">{formatExclusiveCheckoutDateForDisplay(booking.endDate)}</td>

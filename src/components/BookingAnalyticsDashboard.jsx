@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getBookingsInPeriod } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES } from '../constants';
+import { getAllRoomTypesBookingsInPeriod, getAllRoomTypesAnalytics } from '../services/availabilityService';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // Import @react-pdf/renderer components
@@ -192,6 +192,7 @@ const FilteredBookingsDocument = ({ filteredBookings }) => (
 const BookingAnalyticsDashboard = () => {
   // --- State Management ---
   const [programType, setProgramType] = useState('');
+  // Analytics always shows ALL room types combined
   const [viewMode, setViewMode] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -224,7 +225,8 @@ const BookingAnalyticsDashboard = () => {
           setLoading(false);
           return;
       }
-      let bookings = await getBookingsInPeriod(periodStart, queryEndDate);
+      // Analytics dashboard always shows ALL room types aggregated
+      let bookings = await getAllRoomTypesBookingsInPeriod(periodStart, queryEndDate);
       if (programType) {
         bookings = bookings.filter(b => b.program_type === programType);
       }
@@ -249,6 +251,9 @@ const BookingAnalyticsDashboard = () => {
     const { periodStart, periodEnd } = getPeriodDates(viewMode, dateParams);
     const daysInPeriod = getDateArray(periodStart, periodEnd);
     
+    // Analytics always uses total from ALL room types
+    const totalRoomsForSelectedType = ROOM_TYPES.reduce((sum, rt) => sum + rt.totalRooms, 0);
+    
     if (daysInPeriod.length === 0 || filteredBookings.length === 0) {
       return { 
         isEmpty: true, 
@@ -262,6 +267,7 @@ const BookingAnalyticsDashboard = () => {
         topPrograms: [],
         timeSeries: [],
         programType: programType,
+        roomType: 'ALL', // Always ALL for analytics
         selectedYear: selectedYear
       };
     }
@@ -282,7 +288,7 @@ const BookingAnalyticsDashboard = () => {
       roomDaysBooked += roomsBookedOnDay;
     });
     
-    const totalRoomDays = daysInPeriod.length * TOTAL_ROOMS;
+    const totalRoomDays = daysInPeriod.length * totalRoomsForSelectedType;
     const occupancyRate = totalRoomDays > 0 ? (roomDaysBooked / totalRoomDays) * 100 : 0;
     const peakDay = Object.entries(bookingsByDay).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1])[0];
     const avgDuration = filteredBookings.length > 0 ? (filteredBookings.reduce((sum, b) => { const start = parseDateString(b.start_date); const end = parseDateString(b.end_date); return start && end ? sum + (end - start) / (1000 * 60 * 60 * 24) : sum; }, 0) / filteredBookings.length).toFixed(2) : 0;
@@ -326,6 +332,7 @@ const BookingAnalyticsDashboard = () => {
       topPrograms, 
       timeSeries,
       programType: programType, // Added for PDF
+      roomType: 'ALL', // Always ALL for analytics PDF
       selectedYear: selectedYear // Added for PDF
     };
   }, [filteredBookings, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, programType]);
@@ -379,6 +386,7 @@ const BookingAnalyticsDashboard = () => {
       {/* Filters */}
       <div className="analytics-controls">
         <div className="control-group"><label>Program Type:</label><select value={programType} onChange={e => setProgramType(e.target.value)} className="form-select-sm"><option value="">All</option>{PROGRAM_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</select></div>
+        <div className="control-group"><span className="filter-info">📊 Analytics shows data from ALL room types (MDC + Tata Hall + MDC Suites)</span></div>
         <div className="control-group"><label>View:</label><select value={viewMode} onChange={e => setViewMode(e.target.value)} className="form-select-sm">{VIEW_MODES.map(vm => <option key={vm.value} value={vm.value}>{vm.label}</option>)}</select></div>
         {viewMode === 'day' && (<div className="control-group"><label>Date:</label><input type="date" value={selectedDate.toISOString().slice(0, 10)} onChange={e => setSelectedDate(new Date(e.target.value))} className="form-input-sm" /></div>)}
         {viewMode === 'month' && (<><div className="control-group"><label>Year:</label><select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="form-select-sm">{YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="control-group"><label>Month:</label><select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="form-select-sm">{MONTH_NAMES.map((name, index) => <option key={index} value={index}>{name}</option>)}</select></div></>)}
@@ -418,8 +426,8 @@ const BookingAnalyticsDashboard = () => {
                 </PDFDownloadLink>
             </div>
             <table className="elegant-table">
-              <thead><tr><th>Title</th><th>Type</th><th>Rooms</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
-              <tbody>{filteredBookings.length > 0 ? filteredBookings.map(b => (<tr key={b.id}><td>{b.program_title}</td><td>{PROGRAM_TYPES.find(pt => pt.value === b.program_type)?.label || b.program_type}</td><td>{b.number_of_rooms}</td><td>{parseDateString(b.start_date)?.toLocaleDateString() ?? 'N/A'}</td><td>{parseDateString(b.end_date)?.toLocaleDateString() ?? 'N/A'}</td><td>{b.status}</td></tr>)) : (<tr><td colSpan={6} style={{textAlign:'center'}}>No bookings found for selected filter.</td></tr>)}</tbody>
+              <thead><tr><th>Title</th><th>Type</th><th>Room Type</th><th>Rooms</th><th>Check-in</th><th>Check-out</th><th>Status</th></tr></thead>
+              <tbody>{filteredBookings.length > 0 ? filteredBookings.map(b => (<tr key={b.id}><td>{b.program_title}</td><td>{PROGRAM_TYPES.find(pt => pt.value === b.program_type)?.label || b.program_type}</td><td>{ROOM_TYPES.find(rt => rt.value === b.room_type)?.label || b.room_type}</td><td>{b.number_of_rooms}</td><td>{parseDateString(b.start_date)?.toLocaleDateString() ?? 'N/A'}</td><td>{parseDateString(b.end_date)?.toLocaleDateString() ?? 'N/A'}</td><td>{b.status}</td></tr>)) : (<tr><td colSpan={7} style={{textAlign:'center'}}>No bookings found for selected filter.</td></tr>)}</tbody>
             </table>
           </div>
           <div className="monthly-detail-section" style={{ marginTop: '40px', borderTop: '1px solid #eee', paddingTop: '20px' }}>
