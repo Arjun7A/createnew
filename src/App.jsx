@@ -24,7 +24,7 @@ function App() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const navigate = useNavigate();
 
-  const ADMIN_EMAILS = ['arjun.avittathur@gmail.com', 'admin_mdp@iimcal.ac.in'];
+  const ADMIN_EMAIL = 'arjun.avittathur@gmail.com';
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -43,10 +43,7 @@ function App() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      setSession(null);
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.replace('/'); // Hard reload to login page
+      navigate('/');
     } catch (error) {
       console.error('Error logging out:', error.message);
     }
@@ -75,7 +72,7 @@ function App() {
       <Route path="/" element={
         !session ? (
           <Login />
-        ) : !ADMIN_EMAILS.includes(session.user.email) ? (
+        ) : session.user.email !== ADMIN_EMAIL ? (
           <div className="access-denied" style={{textAlign: 'center', padding: '50px', fontFamily: 'sans-serif'}}>
             <h2>Access Restricted</h2>
             <p>Only authorized administrators may access this system.</p>
