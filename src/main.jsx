@@ -5,9 +5,8 @@ import App from './App.jsx';
 import './styles/main.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>
+  // <React.StrictMode> has been removed to resolve the issue with @react-pdf/renderer
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
 );

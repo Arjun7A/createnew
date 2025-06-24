@@ -119,7 +119,46 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
         if (toolbar.view === Views.AGENDA) return date.format('dddd, MMM D, YYYY') + ' (Agenda)';
         return date.format('MMMM YYYY');
     };
-    return (<div className="rbc-toolbar elegant-toolbar"><div className="rbc-btn-group"><button type="button" onClick={goToCurrent} className="btn btn-outline">Today</button><button type="button" onClick={goToBack} className="btn btn-outline">‹</button><button type="button" onClick={goToNext} className="btn btn-outline">›</button></div><span className="rbc-toolbar-label">{label()}</span><div className="rbc-btn-group">{[{view:Views.MONTH,label:'Month'},{view:Views.WEEK,label:'Week'},{view:Views.DAY,label:'Day'},{view:Views.AGENDA,label:'Agenda'}].map(item=>(<button key={item.view} type="button" className={`btn btn-outline ${toolbar.view===item.view?'rbc-active':''}`} onClick={()=>toolbar.onView(item.view)}>{item.label}</button>))}</div></div>);
+
+    // Year and Month dropdown logic
+    const currentYear = moment(toolbar.date).year();
+    const currentMonth = moment(toolbar.date).month();
+    const years = [];
+    for (let y = currentYear - 3; y <= currentYear + 3; y++) years.push(y);
+    const months = moment.months();
+
+    const handleYearChange = (e) => {
+      const newYear = parseInt(e.target.value, 10);
+      toolbar.onNavigate('DATE', new Date(newYear, currentMonth, 1));
+    };
+    const handleMonthChange = (e) => {
+      const newMonth = parseInt(e.target.value, 10);
+      toolbar.onNavigate('DATE', new Date(currentYear, newMonth, 1));
+    };
+
+    return (
+      <div className="rbc-toolbar elegant-toolbar">
+        <div className="rbc-btn-group">
+          <button type="button" onClick={goToCurrent} className="btn btn-outline">Today</button>
+          <button type="button" onClick={goToBack} className="btn btn-outline">‹</button>
+          <button type="button" onClick={goToNext} className="btn btn-outline">›</button>
+        </div>
+        <span className="rbc-toolbar-label">{label()}</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5em', marginLeft: '1em' }}>
+          <select value={currentYear} onChange={handleYearChange} style={{ padding: '2px 6px' }}>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select value={currentMonth} onChange={handleMonthChange} style={{ padding: '2px 6px' }}>
+            {months.map((m, idx) => <option key={m} value={idx}>{m}</option>)}
+          </select>
+        </div>
+        <div className="rbc-btn-group">
+          {[{view:Views.MONTH,label:'Month'},{view:Views.WEEK,label:'Week'},{view:Views.DAY,label:'Day'},{view:Views.AGENDA,label:'Agenda'}].map(item=>(
+            <button key={item.view} type="button" className={`btn btn-outline ${toolbar.view===item.view?'rbc-active':''}`} onClick={()=>toolbar.onView(item.view)}>{item.label}</button>
+          ))}
+        </div>
+      </div>
+    );
   }, []); 
 
   const components = useMemo(() => ({ toolbar: CustomToolbar }), [CustomToolbar]);
