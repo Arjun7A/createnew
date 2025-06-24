@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import './Login.css';
 import iimBuilding from '../assets/iim-building.jpg';
+import { useNavigate } from 'react-router-dom';
 
 const ResetPassword = () => {
     const [password, setPassword] = useState('');
@@ -10,6 +11,7 @@ const ResetPassword = () => {
     const [success, setSuccess] = useState(false);
     const [tokenChecked, setTokenChecked] = useState(false);
     const [sessionValid, setSessionValid] = useState(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
         // Check if we have a session (user clicked the reset/invite link)
@@ -24,6 +26,15 @@ const ResetPassword = () => {
         };
         checkSession();
     }, []);
+
+    useEffect(() => {
+        if (success) {
+            const timer = setTimeout(() => {
+                navigate('/');
+            }, 2000); // 2 seconds delay
+            return () => clearTimeout(timer);
+        }
+    }, [success, navigate]);
 
     const handleReset = async (e) => {
         e.preventDefault();
@@ -86,8 +97,7 @@ const ResetPassword = () => {
                     )}
                     {success && (
                         <div className="success-message">
-                            <p>Your password has been set successfully.</p>
-                            <a href="/" className="btn btn-primary btn-full-width">Back to Login</a>
+                            <p>Your password has been set successfully.<br/>Redirecting to login...</p>
                         </div>
                     )}
                 </div>
