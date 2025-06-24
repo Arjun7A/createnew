@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getAllRoomTypesBookingsInPeriod, getAllRoomTypesAnalytics } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType, getTotalRoomsAllTypes } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // Import @react-pdf/renderer components
@@ -252,7 +252,7 @@ const BookingAnalyticsDashboard = () => {
     const daysInPeriod = getDateArray(periodStart, periodEnd);
     
     // Analytics always uses total from ALL room types
-    const totalRoomsForSelectedType = ROOM_TYPES.reduce((sum, rt) => sum + rt.totalRooms, 0);
+    const totalRoomsForSelectedType = getTotalRoomsAllTypes(); // Always use total across all room types for analytics
     
     if (daysInPeriod.length === 0 || filteredBookings.length === 0) {
       return { 
@@ -340,6 +340,7 @@ const BookingAnalyticsDashboard = () => {
   const monthlyDetailData = useMemo(() => {
     const { year, month } = monthlyDetailSelection;
     const daysInMonth = getDaysInMonth(year, month);
+    const totalRoomsAllTypes = getTotalRoomsAllTypes();
     const dailyBreakdown = [];
     const monthlyTotals = { total: 0 };
     PROGRAM_TYPES.forEach(pt => monthlyTotals[pt.value] = 0);
@@ -356,11 +357,12 @@ const BookingAnalyticsDashboard = () => {
                 dailyData.total += rooms;
             }
         });
-        dailyData.occupancy = TOTAL_ROOMS > 0 ? (dailyData.total / TOTAL_ROOMS) * 100 : 0;
+        const totalRoomsAllTypes = ROOM_TYPES.reduce((sum, rt) => sum + rt.totalRooms, 0);
+        dailyData.occupancy = totalRoomsAllTypes > 0 ? (dailyData.total / totalRoomsAllTypes) * 100 : 0;
         dailyBreakdown.push(dailyData);
         Object.keys(monthlyTotals).forEach(key => { monthlyTotals[key] += (dailyData[key] || 0); });
     }
-    const totalRoomDaysInMonth = daysInMonth * TOTAL_ROOMS;
+    const totalRoomDaysInMonth = daysInMonth * totalRoomsAllTypes;
     const monthlyOccupancy = totalRoomDaysInMonth > 0 ? (monthlyTotals.total / totalRoomDaysInMonth) * 100 : 0;
     return { dailyBreakdown, monthlyTotals, monthlyOccupancy, selection: monthlyDetailSelection }; // Pass selection for PDF title
   }, [filteredBookings, monthlyDetailSelection]);

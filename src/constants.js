@@ -12,6 +12,10 @@ export const getTotalRoomsForType = (roomType) => {
   return roomTypeObj ? roomTypeObj.totalRooms : 133;
 };
 
+export const getTotalRoomsAllTypes = () => {
+  return ROOM_TYPES.reduce((sum, rt) => sum + rt.totalRooms, 0);
+};
+
 export const PROGRAM_TYPES = [
   { value: 'OPEN_LDP', label: 'Open LDP' },
   { value: 'CUSTOM_LDP', label: 'Custom LDP' },

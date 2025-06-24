@@ -4,7 +4,7 @@ import { Calendar, momentLocalizer, Views } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { getConsolidatedBookingsForDisplay } from '../services/availabilityService';
-import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType } from '../constants';
+import { TOTAL_ROOMS, PROGRAM_TYPES, ROOM_TYPES, getTotalRoomsForType, getTotalRoomsAllTypes } from '../constants';
 
 // Import @react-pdf/renderer components
 import { Document, Page, Text, View, StyleSheet, PDFDownloadLink } from '@react-pdf/renderer';
@@ -240,7 +240,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
         </div>
         <div className="rbc-btn-group" style={{marginLeft: 'auto', gap: '10px'}}> {/* Adjusted: Added gap for spacing */}
           <PDFDownloadLink
-            document={<CalendarPdfDocument calendarEvents={eventsForPdf} currentCalDate={toolbar.date} totalRooms={TOTAL_ROOMS} />}
+            document={<CalendarPdfDocument calendarEvents={eventsForPdf} currentCalDate={toolbar.date} totalRooms={getTotalRoomsAllTypes()} />}
             fileName={`Calendar_${moment(toolbar.date).format('YYYY-MM')}.pdf`}
             className="btn-pdf-download"
           >

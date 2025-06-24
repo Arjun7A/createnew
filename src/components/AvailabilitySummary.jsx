@@ -1,7 +1,7 @@
 // src/components/AvailabilitySummary.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllBookings } from '../services/availabilityService'; 
-import { TOTAL_ROOMS, ROOM_TYPES, getTotalRoomsForType } from '../constants';
+import { TOTAL_ROOMS, ROOM_TYPES, getTotalRoomsForType, getTotalRoomsAllTypes } from '../constants';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 
