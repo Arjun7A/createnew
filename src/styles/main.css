@@ -1227,3 +1227,76 @@ body {
 }
 
 /* Remove styles for .existing-bookings-calendar if they existed */
+/* --- Styles for Elegant Calendar Toolbar --- */
+
+.elegant-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 5px;
+  flex-wrap: wrap; /* Allows wrapping on smaller screens */
+  gap: 10px; /* Adds space between groups */
+}
+
+/* Style for the custom dropdown wrapper */
+.toolbar-select-wrapper {
+  position: relative;
+  display: inline-block;
+  background-color: #f9f9f9;
+  border: 1px solid #ccc;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* Style the actual select element inside the wrapper */
+.toolbar-select-wrapper select {
+  -webkit-appearance: none; /* Hide default arrow on Chrome/Safari */
+  -moz-appearance: none; /* Hide default arrow on Firefox */
+  appearance: none;
+  background-color: transparent;
+  border: none;
+  padding: 6px 30px 6px 12px; /* Make space for custom arrow */
+  font-size: 0.9em;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Create the custom dropdown arrow */
+.toolbar-select-wrapper::after {
+  content: '▼';
+  font-size: 10px;
+  color: #555;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none; /* Prevents the arrow from blocking clicks on the select */
+}
+
+/* Style the PDF download link to look like a button */
+.btn-pdf-download {
+  display: inline-block;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  font-weight: bold;
+  text-decoration: none;
+  color: #fff;
+  background-color: #28a745; /* A distinct 'download' color */
+  border: 1px solid #28a745;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.btn-pdf-download:hover {
+  background-color: #218838;
+}
+
+.btn-pdf-download[disabled] {
+  background-color: #cccccc;
+  border-color: #cccccc;
+  cursor: not-allowed;
+}
+
