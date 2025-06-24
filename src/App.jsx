@@ -43,7 +43,10 @@ function App() {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      navigate('/');
+      setSession(null);
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.replace('/'); // Hard reload to login page
     } catch (error) {
       console.error('Error logging out:', error.message);
     }
