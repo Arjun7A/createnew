@@ -84,7 +84,7 @@ const FirstReportDocument = ({ analyticsData, viewMode, selectedYear }) => (
     <Page size="A4" style={pdfStyles.page} orientation="portrait">
       <Text style={pdfStyles.header}>Booking Analytics First Report</Text>
       <Text style={pdfStyles.text}>Generated on: {new Date().toLocaleDateString()}</Text>
-      <Text style={pdfStyles.text}>Filters: Program: {analyticsData.programType ? PROGRAM_TYPES.find(pt => pt.value === analyticsData.programType)?.label : 'All'}, Room Type: {analyticsData.roomType === 'ALL' ? 'All' : ROOM_TYPES.find(rt => rt.value === analyticsData.roomType)?.label}, View: {viewMode === 'year' ? `Year (${selectedYear})` : viewMode}</Text>
+      <Text style={pdfStyles.text}>Filters: Search: {analyticsData.searchFilter || 'None'}, Program: {analyticsData.programType ? PROGRAM_TYPES.find(pt => pt.value === analyticsData.programType)?.label : 'All'}, Room Type: {analyticsData.roomType === 'ALL' ? 'All' : ROOM_TYPES.find(rt => rt.value === analyticsData.roomType)?.label}, View: {viewMode === 'year' ? `Year (${selectedYear})` : viewMode}</Text>
 
       <Text style={pdfStyles.subHeader}>Key Metrics Summary</Text>
       <View style={pdfStyles.table}>
@@ -193,6 +193,7 @@ const BookingAnalyticsDashboard = () => {
   // --- State Management ---
   const [programType, setProgramType] = useState('');
   const [roomType, setRoomType] = useState('ALL'); // Add room type filter
+  const [searchFilter, setSearchFilter] = useState(''); // Add search filter for program titles
   // Analytics always shows ALL room types combined
   const [viewMode, setViewMode] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -234,11 +235,16 @@ const BookingAnalyticsDashboard = () => {
       if (programType) {
         bookings = bookings.filter(b => b.program_type === programType);
       }
+      if (searchFilter) {
+        bookings = bookings.filter(b => 
+          b.program_title && b.program_title.toLowerCase().includes(searchFilter.toLowerCase())
+        );
+      }
       setFilteredBookings(bookings);
       setLoading(false);
     };
     fetchData();
-  }, [programType, roomType, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, rangeStartMonth, rangeStartYear, rangeEndMonth, rangeEndYear]);
+  }, [programType, roomType, searchFilter, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, rangeStartMonth, rangeStartYear, rangeEndMonth, rangeEndYear]);
 
   useEffect(() => {
     if (viewMode === 'month' || viewMode === 'year') {
@@ -339,9 +345,10 @@ const BookingAnalyticsDashboard = () => {
       timeSeries,
       programType: programType, // Added for PDF
       roomType: roomType, // Added for PDF
+      searchFilter: searchFilter, // Added for PDF
       selectedYear: selectedYear // Added for PDF
     };
-  }, [filteredBookings, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, programType, roomType]);
+  }, [filteredBookings, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, programType, roomType, searchFilter]);
 
   const monthlyDetailData = useMemo(() => {
     const { year, month } = monthlyDetailSelection;
@@ -393,6 +400,7 @@ const BookingAnalyticsDashboard = () => {
 
       {/* Filters */}
       <div className="analytics-controls">
+        <div className="control-group"><label>Search Program:</label><input type="text" placeholder="Search by program title..." value={searchFilter} onChange={e => setSearchFilter(e.target.value)} className="form-input-sm" style={{minWidth: '200px'}} /></div>
         <div className="control-group"><label>Program Type:</label><select value={programType} onChange={e => setProgramType(e.target.value)} className="form-select-sm"><option value="">All</option>{PROGRAM_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</select></div>
         <div className="control-group"><label>Room Type:</label><select value={roomType} onChange={e => setRoomType(e.target.value)} className="form-select-sm"><option value="ALL">All Room Types</option>{ROOM_TYPES.map(rt => <option key={rt.value} value={rt.value}>{rt.label}</option>)}</select></div>
         <div className="control-group"><label>View:</label><select value={viewMode} onChange={e => setViewMode(e.target.value)} className="form-select-sm">{VIEW_MODES.map(vm => <option key={vm.value} value={vm.value}>{vm.label}</option>)}</select></div>

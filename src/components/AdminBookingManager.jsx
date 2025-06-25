@@ -15,6 +15,7 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL'); // Filter for viewing bookings
+    const [searchFilter, setSearchFilter] = useState(''); // Add search filter for program titles
 
     const convertUTCDatetoLocalDateForPicker = (utcDate) => {
         if (!utcDate) return getInitialLocalDate();
@@ -50,6 +51,14 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
     }, [addToast, selectedRoomTypeFilter]);
 
     useEffect(() => { fetchBookings(); }, [fetchBookings, onBookingChanged, selectedRoomTypeFilter]);
+
+    // Filter bookings based on search filter
+    const filteredBookings = bookings.filter(booking => {
+        if (searchFilter) {
+            return booking.programTitle && booking.programTitle.toLowerCase().includes(searchFilter.toLowerCase());
+        }
+        return true;
+    });
 
     const handleDeleteBooking = async (bookingId, bookingStatus) => { 
         if (!window.confirm(`Delete this ${bookingStatus || ''} booking? This action cannot be undone.`)) return; 
@@ -195,21 +204,43 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
         <div className="card admin-card">
             <h2 className="form-section-title">Admin Booking Management</h2>
             
-            {/* Room Type Filter */}
+            {/* Filters */}
             {!isEditing && (
                 <div className="filter-section" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <label className="form-label">Filter by Room Type:</label>
-                    <select 
-                        value={selectedRoomTypeFilter} 
-                        onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
-                        className="form-select"
-                        style={{ maxWidth: '200px' }}
-                    >
-                        <option value="ALL">All Room Types</option>
-                        {ROOM_TYPES.map(rt => (
-                            <option key={rt.value} value={rt.value}>{rt.label}</option>
-                        ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label className="form-label">Search Program:</label>
+                            <input 
+                                type="text" 
+                                placeholder="Search by program title..." 
+                                value={searchFilter} 
+                                onChange={(e) => setSearchFilter(e.target.value)}
+                                className="form-input"
+                                style={{ minWidth: '200px' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label className="form-label">Filter by Room Type:</label>
+                            <select 
+                                value={selectedRoomTypeFilter} 
+                                onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
+                                className="form-select"
+                                style={{ maxWidth: '200px' }}
+                            >
+                                <option value="ALL">All Room Types</option>
+                                {ROOM_TYPES.map(rt => (
+                                    <option key={rt.value} value={rt.value}>{rt.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    {(searchFilter || selectedRoomTypeFilter !== 'ALL') && (
+                        <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#666' }}>
+                            Showing: {filteredBookings.length} of {bookings.length} bookings
+                            {searchFilter && ` • Search: "${searchFilter}"`}
+                            {selectedRoomTypeFilter !== 'ALL' && ` • Room Type: ${ROOM_TYPES.find(rt => rt.value === selectedRoomTypeFilter)?.label}`}
+                        </div>
+                    )}
                 </div>
             )}
             
@@ -256,12 +287,12 @@ const AdminBookingManager = ({ addToast, onBookingChanged }) => {
             ) : (
                 <div className="bookings-list">
                     {loading && <div className="full-card-spinner"><div className="spinner-large"></div><p>Loading...</p></div>}
-                    {!loading && bookings.length === 0 && ( <p className="no-bookings">No bookings found.</p> )}
-                    {!loading && bookings.length > 0 && (
+                    {!loading && filteredBookings.length === 0 && ( <p className="no-bookings">No bookings found{searchFilter ? ` for "${searchFilter}"` : ''}.</p> )}
+                    {!loading && filteredBookings.length > 0 && (
                         <div className="bookings-table-container"><table className="bookings-table elegant-table">
                             <thead><tr><th>Title</th><th>Type</th><th>Room Type</th><th>Rooms</th><th>Check-in</th><th>Last Night</th><th>Check-out Day</th><th>Status</th><th>Actions</th></tr></thead>
                             <tbody>
-                            {bookings.map(booking => ( 
+                            {filteredBookings.map(booking => ( 
                                 <tr key={booking.id} className={`booking-row status-${booking.bookingStatus?.toLowerCase()}`}>
                                 <td data-label="Title">{booking.programTitle}</td><td data-label="Type">{getDisplayProgramType(booking)}</td>
                                 <td data-label="Room Type">{ROOM_TYPES.find(rt => rt.value === booking.roomType)?.label || booking.roomType}</td>

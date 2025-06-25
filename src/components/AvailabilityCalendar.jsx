@@ -140,6 +140,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
   const [view, setView] = useState(Views.MONTH);
   const [currentCalDate, setCurrentCalDate] = useState(new Date()); 
   const [selectedRoomTypeFilter, setSelectedRoomTypeFilter] = useState('ALL'); // Calendar shows ALL room types by default
+  const [searchFilter, setSearchFilter] = useState(''); // Add search filter for program titles
 
   const fetchAndSetCalendarEvents = useCallback(async () => {
     setLoading(true);
@@ -148,7 +149,16 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
       const roomTypeForQuery = selectedRoomTypeFilter === 'ALL' ? null : selectedRoomTypeFilter;
       const displayBookings = await getConsolidatedBookingsForDisplay(roomTypeForQuery); 
       if (Array.isArray(displayBookings)) {
-        const events = displayBookings.map(booking => ({
+        let filteredBookings = displayBookings;
+        
+        // Apply search filter if provided
+        if (searchFilter) {
+          filteredBookings = filteredBookings.filter(booking => 
+            booking.programTitle && booking.programTitle.toLowerCase().includes(searchFilter.toLowerCase())
+          );
+        }
+        
+        const events = filteredBookings.map(booking => ({
           id: booking.id,
           title: `${booking.programTitle} (${getDisplayProgramTypeForCalendar(booking)}, ${booking.numberOfRooms} rooms, ${ROOM_TYPES.find(rt => rt.value === booking.roomType)?.label || booking.roomType}) - ${booking.bookingStatus}`,
           start: new Date(booking.startDate),       
@@ -165,7 +175,7 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
       setCalendarEvents([]);
     }
     finally { setLoading(false); }
-  }, [selectedRoomTypeFilter]);
+  }, [selectedRoomTypeFilter, searchFilter]);
 
   useEffect(() => { fetchAndSetCalendarEvents(); }, [refreshTrigger, fetchAndSetCalendarEvents]);
 
@@ -260,28 +270,44 @@ const AvailabilityCalendar = ({ refreshTrigger, onDateSelect }) => {
     <div className="card calendar-card elegant-calendar-wrapper">
       <h2 className="form-section-title">Room Booking Calendar</h2>
       
-      {/* Room Type Filter */}
+      {/* Filters */}
       <div className="filter-section" style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-        <label className="form-label">Filter by Room Type:</label>
-        <select 
-          value={selectedRoomTypeFilter} 
-          onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
-          className="form-select"
-          style={{ maxWidth: '200px', marginLeft: '10px' }}
-        >
-          <option value="ALL">All Room Types</option>
-          {ROOM_TYPES.map(rt => (
-            <option key={rt.value} value={rt.value}>{rt.label}</option>
-          ))}
-        </select>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label className="form-label">Search Program:</label>
+            <input 
+              type="text" 
+              placeholder="Search by program title..." 
+              value={searchFilter} 
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="form-input"
+              style={{ minWidth: '200px' }}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label className="form-label">Filter by Room Type:</label>
+            <select 
+              value={selectedRoomTypeFilter} 
+              onChange={(e) => setSelectedRoomTypeFilter(e.target.value)}
+              className="form-select"
+              style={{ maxWidth: '200px' }}
+            >
+              <option value="ALL">All Room Types</option>
+              {ROOM_TYPES.map(rt => (
+                <option key={rt.value} value={rt.value}>{rt.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
       
       <p className="calendar-instructions">
-        Displays confirmed and pencil bookings. Click/drag dates to pre-fill search. 
+        Displays confirmed and pencil bookings. Click/drag dates to pre-fill search. Use search to find specific programs.
         {selectedRoomTypeFilter === 'ALL' ? 
           `All room types shown.` : 
           `Showing: ${ROOM_TYPES.find(rt => rt.value === selectedRoomTypeFilter)?.label} (${getTotalRoomsForType(selectedRoomTypeFilter)} rooms).`
         }
+        {searchFilter && ` Filtered by: "${searchFilter}"`}
       </p>
       {loading ? ( <div className="centered-spinner-container" style={{height:'400px'}}><div className="spinner-large"></div><p>Loading Calendar...</p></div> ) : (
         <Calendar
