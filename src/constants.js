@@ -1,7 +1,7 @@
 // src/constants.js
 export const ROOM_TYPES = [
   { value: 'MDC', label: 'MDC', totalRooms: 133 },
-  { value: 'TATA_HALL', label: 'Tata Hall', totalRooms: 16 },
+  { value: 'TATA_HALL', label: 'Tata Hall', totalRooms: 60 },
   { value: 'MDC_SUITES', label: 'MDC Suites', totalRooms: 14 }
 ];
 

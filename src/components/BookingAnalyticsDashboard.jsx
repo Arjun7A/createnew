@@ -84,7 +84,7 @@ const FirstReportDocument = ({ analyticsData, viewMode, selectedYear }) => (
     <Page size="A4" style={pdfStyles.page} orientation="portrait">
       <Text style={pdfStyles.header}>Booking Analytics First Report</Text>
       <Text style={pdfStyles.text}>Generated on: {new Date().toLocaleDateString()}</Text>
-      <Text style={pdfStyles.text}>Filters: Program: {analyticsData.programType ? PROGRAM_TYPES.find(pt => pt.value === analyticsData.programType)?.label : 'All'}, View: {viewMode === 'year' ? `Year (${selectedYear})` : viewMode}</Text>
+      <Text style={pdfStyles.text}>Filters: Program: {analyticsData.programType ? PROGRAM_TYPES.find(pt => pt.value === analyticsData.programType)?.label : 'All'}, Room Type: {analyticsData.roomType === 'ALL' ? 'All' : ROOM_TYPES.find(rt => rt.value === analyticsData.roomType)?.label}, View: {viewMode === 'year' ? `Year (${selectedYear})` : viewMode}</Text>
 
       <Text style={pdfStyles.subHeader}>Key Metrics Summary</Text>
       <View style={pdfStyles.table}>
@@ -192,6 +192,7 @@ const FilteredBookingsDocument = ({ filteredBookings }) => (
 const BookingAnalyticsDashboard = () => {
   // --- State Management ---
   const [programType, setProgramType] = useState('');
+  const [roomType, setRoomType] = useState('ALL'); // Add room type filter
   // Analytics always shows ALL room types combined
   const [viewMode, setViewMode] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -225,8 +226,11 @@ const BookingAnalyticsDashboard = () => {
           setLoading(false);
           return;
       }
-      // Analytics dashboard always shows ALL room types aggregated
+      // Fetch bookings based on room type filter
       let bookings = await getAllRoomTypesBookingsInPeriod(periodStart, queryEndDate);
+      if (roomType && roomType !== 'ALL') {
+        bookings = bookings.filter(b => b.room_type === roomType);
+      }
       if (programType) {
         bookings = bookings.filter(b => b.program_type === programType);
       }
@@ -234,7 +238,7 @@ const BookingAnalyticsDashboard = () => {
       setLoading(false);
     };
     fetchData();
-  }, [programType, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, rangeStartMonth, rangeStartYear, rangeEndMonth, rangeEndYear]);
+  }, [programType, roomType, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, rangeStartMonth, rangeStartYear, rangeEndMonth, rangeEndYear]);
 
   useEffect(() => {
     if (viewMode === 'month' || viewMode === 'year') {
@@ -251,8 +255,10 @@ const BookingAnalyticsDashboard = () => {
     const { periodStart, periodEnd } = getPeriodDates(viewMode, dateParams);
     const daysInPeriod = getDateArray(periodStart, periodEnd);
     
-    // Analytics always uses total from ALL room types
-    const totalRoomsForSelectedType = getTotalRoomsAllTypes(); // Always use total across all room types for analytics
+    // Calculate total rooms based on room type filter
+    const totalRoomsForSelectedType = roomType === 'ALL' ? 
+      getTotalRoomsAllTypes() : 
+      getTotalRoomsForType(roomType);
     
     if (daysInPeriod.length === 0 || filteredBookings.length === 0) {
       return { 
@@ -332,10 +338,10 @@ const BookingAnalyticsDashboard = () => {
       topPrograms, 
       timeSeries,
       programType: programType, // Added for PDF
-      roomType: 'ALL', // Always ALL for analytics PDF
+      roomType: roomType, // Added for PDF
       selectedYear: selectedYear // Added for PDF
     };
-  }, [filteredBookings, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, programType]);
+  }, [filteredBookings, viewMode, selectedDate, selectedMonth, selectedYear, rangeStartDate, rangeEndDate, programType, roomType]);
 
   const monthlyDetailData = useMemo(() => {
     const { year, month } = monthlyDetailSelection;
@@ -388,7 +394,7 @@ const BookingAnalyticsDashboard = () => {
       {/* Filters */}
       <div className="analytics-controls">
         <div className="control-group"><label>Program Type:</label><select value={programType} onChange={e => setProgramType(e.target.value)} className="form-select-sm"><option value="">All</option>{PROGRAM_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</select></div>
-        <div className="control-group"><span className="filter-info">📊 Analytics shows data from ALL room types (MDC + Tata Hall + MDC Suites)</span></div>
+        <div className="control-group"><label>Room Type:</label><select value={roomType} onChange={e => setRoomType(e.target.value)} className="form-select-sm"><option value="ALL">All Room Types</option>{ROOM_TYPES.map(rt => <option key={rt.value} value={rt.value}>{rt.label}</option>)}</select></div>
         <div className="control-group"><label>View:</label><select value={viewMode} onChange={e => setViewMode(e.target.value)} className="form-select-sm">{VIEW_MODES.map(vm => <option key={vm.value} value={vm.value}>{vm.label}</option>)}</select></div>
         {viewMode === 'day' && (<div className="control-group"><label>Date:</label><input type="date" value={selectedDate.toISOString().slice(0, 10)} onChange={e => setSelectedDate(new Date(e.target.value))} className="form-input-sm" /></div>)}
         {viewMode === 'month' && (<><div className="control-group"><label>Year:</label><select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))} className="form-select-sm">{YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="control-group"><label>Month:</label><select value={selectedMonth} onChange={e => setSelectedMonth(parseInt(e.target.value))} className="form-select-sm">{MONTH_NAMES.map((name, index) => <option key={index} value={index}>{name}</option>)}</select></div></>)}
